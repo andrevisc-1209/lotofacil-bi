@@ -1,0 +1,7 @@
+lotofacil.db
+.env
+config.json
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
