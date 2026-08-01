@@ -6,7 +6,7 @@ Lê o CSV gerado por lotofacil_coletar.py e produz um dashboard HTML interativo.
 Uso:
     python lotofacil_bi.py                              # lê lotofacil_sorteios.csv
     python lotofacil_bi.py --input meus_dados.csv
-    python lotofacil_bi.py --output lotofacil_bi.html
+    python lotofacil_bi.py --output index.html
 """
 
 from __future__ import annotations
@@ -2552,7 +2552,7 @@ if __name__ == "__main__":
     parser.add_argument("--supabase-url", default=None, help="Necessário só se SUPABASE_URL não estiver no ambiente/.env")
     parser.add_argument("--supabase-key", default=None, help="Necessário só se SUPABASE_ANON_KEY não estiver no ambiente/.env")
     parser.add_argument("--periodo", default=None, help="Filtra os dados antes de gerar o dashboard (ex: 2025, 2025-06)")
-    parser.add_argument("--output", default="lotofacil_bi.html")
+    parser.add_argument("--output", default="index.html")
     args = parser.parse_args()
 
     fonte_supabase = None
