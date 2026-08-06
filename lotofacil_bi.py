@@ -561,52 +561,179 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Lotofácil BI — {titulo}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root {
-    --bg: #0f1117;
-    --card: #1a1d27;
-    --border: #2a2d3e;
+    /* paleta "Dark Analytics App" */
+    --bg: #08090f;
+    --bg2: #0f1018;
+    --bg3: #161824;
+    --border: rgba(255,255,255,0.06);
     --accent: #7c3aed;
-    --accent2: #06b6d4;
-    --accent3: #10b981;
-    --accent4: #f59e0b;
-    --accent5: #ef4444;
-    --text: #e2e8f0;
-    --muted: #64748b;
+    --accent2: #a855f7;
+    --neon: rgba(124,58,237,0.15);
+    --text: #f1f0f5;
+    --muted: #6b7280;
     --green: #10b981;
     --red: #ef4444;
+    --gold: #f59e0b;
+    /* aliases para não quebrar regras existentes que já usavam estes nomes */
+    --card: var(--bg2);
+    --accent3: var(--green);
+    --accent4: var(--gold);
+    --accent5: var(--red);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
-  header { background: linear-gradient(135deg, #1e1b4b 0%, #0f1117 100%); border-bottom: 1px solid var(--border); padding: 20px 28px; display: flex; align-items: center; gap: 16px; }
-  header h1 { font-size: 22px; font-weight: 700; color: #a78bfa; letter-spacing: -0.5px; }
-  header .meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
-  #supabase-status { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 12px; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: radial-gradient(ellipse 1200px 800px at 15% -10%, #211b45 0%, transparent 60%),
+                radial-gradient(ellipse 900px 700px at 100% 0%, #0d2b3d 0%, transparent 55%),
+                var(--bg);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  @media (max-width: 640px) { body { font-size: 13px; } }
+  header {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(15,16,24,0.72);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 28px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 20px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; display: flex; align-items: center; gap: 8px; }
+  header .meta { display: none; } /* substituído pelo badge de concurso central */
+  .concurso-badge {
+    margin: 0 auto; display: flex; align-items: center; gap: 8px;
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 999px;
+    padding: 6px 16px; font-size: 12px; color: var(--muted); white-space: nowrap;
+  }
+  .concurso-badge b { color: var(--text); font-weight: 600; }
+  .concurso-badge .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  @media (max-width: 640px) {
+    header { padding: 14px 16px; gap: 10px; }
+    header h1 { font-size: 17px; }
+    .concurso-badge { order: 3; width: 100%; justify-content: center; font-size: 11px; padding: 6px 10px; }
+    #supabase-status { margin-left: 0 !important; width: 100%; }
+  }
+  #supabase-status { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 12px; flex-wrap: wrap; }
   #supabase-status .msg { color: var(--muted); }
   #supabase-status .msg.novo { color: #fbbf24; font-weight: 700; }
   #supabase-status .msg.atualizado { color: var(--green); }
-  #supabase-status button { background: var(--accent); border: none; border-radius: 6px; padding: 6px 14px; color: #fff; font-weight: 600; cursor: pointer; font-size: 12px; flex-shrink: 0; }
-  #supabase-status button:hover { background: #6d28d9; }
-  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; padding: 20px 24px 0; }
-  .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
-  .kpi .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
-  .kpi .value { font-size: 26px; font-weight: 700; margin-top: 4px; color: #a78bfa; }
-  .kpi .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
-  .grid { display: grid; gap: 16px; padding: 20px 24px; }
+  #supabase-status button { flex-shrink: 0; }
+  /* botões de ação: primário sólido, secundário outline — border-radius 8px, altura mín. 40px */
+  .btn-primary, .btn-secondary {
+    border-radius: 8px; min-height: 40px; padding: 0 18px; font-weight: 600; font-size: 13px;
+    cursor: pointer; transition: background .15s, border-color .15s, box-shadow .15s, transform .1s;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .btn-primary { background: var(--accent); border: 1px solid var(--accent); color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: #6d28d9; box-shadow: 0 0 0 3px rgba(124,58,237,.25); }
+  .btn-primary:active:not(:disabled) { transform: scale(.97); }
+  .btn-secondary { background: transparent; border: 1px solid var(--accent); color: #a78bfa; }
+  .btn-secondary:hover:not(:disabled) { background: rgba(124,58,237,.12); }
+  .btn-secondary:active:not(:disabled) { transform: scale(.97); }
+  .btn-primary:disabled, .btn-secondary:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+  @media (max-width: 640px) { .btn-primary, .btn-secondary { flex: 1 1 auto; } }
+  /* indicador de token configurado + engrenagem */
+  .gh-token-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; display: inline-block; flex-shrink: 0; }
+  .gh-token-dot.ativo { background: var(--green); box-shadow: 0 0 6px rgba(16,185,129,.7); }
+  .gh-gear-btn { background: transparent !important; border: 1px solid var(--border) !important; border-radius: 6px; padding: 5px 8px !important; cursor: pointer; font-size: 13px !important; color: var(--muted) !important; }
+  .gh-gear-btn:hover { border-color: var(--accent) !important; color: #a78bfa !important; }
+  /* feedback do disparo do workflow */
+  .gh-feedback { margin: 10px 24px 0; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+  .gh-feedback.ok { background: rgba(16,185,129,.12); border: 1px solid var(--green); color: var(--green); }
+  .gh-feedback.erro { background: rgba(239,68,68,.12); border: 1px solid var(--red); color: var(--red); }
+  /* modal de configuração do token */
+  .gh-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; animation: ghModalFadeIn .18s ease; }
+  .gh-modal { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; max-width: 440px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.5); animation: ghModalSlideUp .22s cubic-bezier(.16,1,.3,1); }
+  @keyframes ghModalFadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes ghModalSlideUp { from { opacity: 0; transform: translateY(18px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  @media (max-width: 640px) { .gh-modal { max-width: 90vw; padding: 20px; } }
+  .gh-modal h3 { font-size: 16px; margin-bottom: 12px; color: #a78bfa; }
+  .gh-modal p { font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.5; }
+  .gh-modal-steps { background: #0f1117; border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; font-size: 12px; color: var(--muted); }
+  .gh-modal-steps strong { color: var(--text); display: block; margin-bottom: 6px; }
+  .gh-modal-steps ol { padding-left: 18px; }
+  .gh-modal-steps li { margin-bottom: 3px; }
+  .gh-modal label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .gh-token-input-wrap { display: flex; gap: 6px; margin-bottom: 12px; }
+  .gh-token-input-wrap input { flex: 1; min-width: 0; background: #0f1117; border: 1px solid var(--border); border-radius: 6px; padding: 9px 12px; color: var(--text); font-size: 13px; font-family: monospace; }
+  .gh-token-input-wrap input:focus { outline: none; border-color: var(--accent); }
+  .gh-token-input-wrap button { background: #1e2130; border: 1px solid var(--border); border-radius: 6px; padding: 0 12px; cursor: pointer; color: var(--text); flex-shrink: 0; }
+  .gh-modal-aviso { font-size: 11px; color: #fbbf24; background: rgba(245,158,11,.1); border-radius: 6px; padding: 8px 10px; margin-bottom: 14px; line-height: 1.4; }
+  .gh-modal-erro { font-size: 12px; color: var(--red); margin-bottom: 10px; }
+  .gh-modal-acoes { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+  .gh-modal-acoes button { padding: 0 16px; min-height: 40px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: background .15s, transform .1s; }
+  .gh-modal-acoes button:active { transform: scale(.97); }
+  #gh-modal-cancelar { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  #gh-modal-salvar { background: var(--accent); color: #fff; }
+  #gh-modal-salvar:hover { background: #6d28d9; }
+  #gh-modal-remover { background: transparent; border: 1px solid var(--red); color: var(--red); margin-right: auto; }
+  #gh-modal-remover:hover { background: rgba(239,68,68,.1); }
+  @media (max-width: 640px) {
+    .gh-modal-acoes { flex-direction: column-reverse; }
+    .gh-modal-acoes button { width: 100%; margin-right: 0 !important; }
+  }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; padding: 24px 24px 0; }
+  .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; box-shadow: 0 4px 24px rgba(0,0,0,.25); transition: transform .15s, box-shadow .15s; }
+  .kpi:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,.35); }
+  .kpi .kpi-icon { font-size: 18px; margin-bottom: 6px; display: block; opacity: .9; }
+  .kpi .label { color: var(--muted); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .5px; line-height: 1.4; }
+  .kpi .value { font-size: 36px; font-weight: 700; margin-top: 4px; color: #a78bfa; line-height: 1.15; }
+  .kpi .sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  @media (max-width: 640px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 16px 16px 0; }
+    .kpi { padding: 14px; border-radius: 12px; }
+    .kpi .value { font-size: 24px; }
+  }
+  .grid { display: grid; gap: 20px; padding: 24px; }
   .grid-2 { grid-template-columns: 1fr 1fr; }
   .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
   .grid-13 { grid-template-columns: 1.4fr 1fr; }
   .grid-31 { grid-template-columns: 1fr 1.4fr; }
-  @media (max-width: 900px) { .grid-2, .grid-3, .grid-13, .grid-31 { grid-template-columns: 1fr; } }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
-  .card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 16px; }
+  /* tablet (641px-1024px): grids de 3 colunas viram 2; os de 2 colunas já servem */
+  @media (max-width: 1024px) { .grid-3 { grid-template-columns: 1fr 1fr; } }
+  /* mobile (<=640px): tudo vira 1 coluna */
+  @media (max-width: 640px) { .grid-2, .grid-3, .grid-13, .grid-31 { grid-template-columns: 1fr; } .grid { gap: 14px; padding: 16px; } }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; box-shadow: 0 4px 24px rgba(0,0,0,.3); transition: border-color .2s ease, box-shadow .2s ease; }
+  .card:hover { border-color: rgba(124,58,237,.3); box-shadow: 0 4px 24px rgba(0,0,0,.3), 0 0 0 1px rgba(124,58,237,.08); }
+  .card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  /* fade-in ao trocar de aba de página (Visão Geral / Blocos / Histórico) */
+  .page-content { animation: pageFadeIn .25s ease; }
+  @keyframes pageFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  @media (max-width: 640px) { .card { padding: 16px; border-radius: 12px; } }
   canvas { max-height: 280px; }
-  /* heatmap */
-  .heatmap { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
-  .heatcell { border-radius: 8px; padding: 10px 4px; text-align: center; font-weight: 700; font-size: 15px; transition: transform .15s; cursor: default; }
-  .heatcell:hover { transform: scale(1.1); }
-  .heatcell .freq { font-size: 10px; font-weight: 400; opacity: .75; display: block; margin-top: 2px; }
+  /* heatmap (usado só na aba Blocos — grade-wrap) */
+  .heatcell { border-radius: 10px; padding: 14px 4px; text-align: center; font-weight: 800; font-size: 18px; transition: transform .15s; cursor: default; }
+  .heatcell:hover { transform: scale(1.12); z-index: 2; position: relative; }
+  .heatcell .freq { font-size: 11px; font-weight: 500; opacity: .8; display: block; margin-top: 3px; }
+  @media (max-width: 640px) {
+    .heatcell { padding: 10px 2px; font-size: 15px; border-radius: 8px; }
+    .heatcell .freq { font-size: 9px; }
+  }
+  /* grade interativa 5×5 — substitui o antigo heatmap estático da Visão Geral */
+  .numgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; max-width: 420px; margin: 0 auto; }
+  .numgrid-cell {
+    aspect-ratio: 1; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 15px; color: #fff; cursor: pointer; border: 2px solid transparent;
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+  }
+  .numgrid-cell:hover { transform: scale(1.1); }
+  .numgrid-cell.selecionada { border-color: var(--accent2); box-shadow: 0 0 0 4px var(--neon), 0 0 18px rgba(168,85,247,.55); transform: scale(1.06); }
+  .numgrid-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+  .numgrid-hint { font-size: 12px; color: var(--muted); flex: 1 1 260px; }
+  @media (max-width: 640px) {
+    .numgrid { max-width: 300px; gap: 7px; }
+    .numgrid-cell { font-size: 12px; }
+    .numgrid-footer { flex-direction: column; align-items: stretch; }
+  }
   /* tab system */
   .tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
   .tab { padding: 5px 14px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 600; transition: all .15s; }
@@ -615,9 +742,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .tab-content.active { display: block; }
   /* table */
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; padding: 6px 8px; border-bottom: 1px solid var(--border); }
-  td { padding: 6px 8px; border-bottom: 1px solid #1e2130; }
+  th { text-align: left; color: var(--muted); font-weight: 700; font-size: 11px; text-transform: uppercase; padding: 10px 8px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--card); z-index: 1; }
+  td { padding: 9px 8px; border-bottom: 1px solid #1e2130; }
+  tbody tr:nth-child(even) td { background: rgba(255,255,255,.025); }
+  tbody tr:hover td { background: rgba(124,58,237,.07); }
   tr:last-child td { border-bottom: none; }
+  @media (max-width: 640px) { table { font-size: 12px; } td, th { padding: 7px 6px; } }
   .badge { display: inline-flex; align-items: center; gap: 3px; background: #1e2130; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: 700; }
   .badge.up { color: var(--green); }
   .badge.down { color: var(--red); }
@@ -679,14 +809,56 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .sim-result-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #1e2130; }
   .sim-result-row:last-child { border-bottom: none; }
   .sim-result-row .pontos { width: 90px; font-weight: 700; color: var(--text); flex-shrink: 0; }
+  /* simulador — múltiplos jogos */
+  .sim-qtd-selector { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; font-size: 13px; }
+  .sim-qtd-selector label { display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--text); }
+  .sim-qtd-label { font-weight: 700; color: var(--muted); text-transform: uppercase; font-size: 11px; letter-spacing: .5px; }
+  .sim-jogos-lista { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .sim-jogo-row { display: flex; align-items: center; gap: 8px; }
+  .sim-jogo-label { width: 62px; flex-shrink: 0; font-size: 12px; color: var(--muted); font-weight: 600; }
+  .sim-jogo-input { flex: 1; min-width: 0; background: #0f1117; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: var(--text); font-size: 13px; }
+  .sim-jogo-input:focus { outline: none; border-color: var(--accent); }
+  .sim-jogo-badge { min-width: 96px; text-align: center; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 6px; flex-shrink: 0; border: 1px solid var(--border); color: var(--muted); }
+  .sim-jogo-badge.ok { background: rgba(16,185,129,.15); color: var(--green); border-color: rgba(16,185,129,.4); }
+  .sim-jogo-badge.parcial { background: rgba(245,158,11,.15); color: #fbbf24; border-color: rgba(245,158,11,.4); }
+  .sim-jogo-badge.erro { background: rgba(239,68,68,.15); color: var(--red); border-color: rgba(239,68,68,.4); }
+  .sim-jogo-remove { background: transparent; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; cursor: pointer; color: var(--muted); font-size: 13px; flex-shrink: 0; }
+  .sim-jogo-remove:hover { border-color: var(--red); color: var(--red); }
+  .sim-acoes { display: flex; gap: 10px; margin-bottom: 14px; }
+  .sim-acoes button { background: var(--accent); border: none; border-radius: 6px; padding: 9px 18px; color: #fff; font-weight: 600; cursor: pointer; font-size: 13px; }
+  .sim-acoes button:hover { background: #6d28d9; }
+  .sim-acoes #sim-btn-add { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .sim-acoes #sim-btn-add:hover { border-color: var(--accent); color: #a78bfa; }
+  .sim-aviso { color: #fbbf24; font-size: 12px; margin-bottom: 10px; }
+  .sim-compare-row.destaque-ouro td { background: rgba(245,158,11,.12); }
+  .sim-trofeu { margin-left: 4px; }
+  .sim-detalhe-toggle { cursor: pointer; color: var(--accent2); font-size: 11px; background: none; border: none; padding: 0; text-decoration: underline; }
+  .sim-detalhe-painel { display: none; padding: 10px 0 4px; }
+  .sim-detalhe-painel.aberto { display: block; }
+  .sim-detalhe-item { display: inline-block; margin: 2px 6px 2px 0; padding: 3px 8px; border-radius: 6px; background: #1e2130; font-size: 11px; color: var(--text); }
+  .sim-copiar-btn { margin-top: 12px; background: transparent; border: 1px solid var(--border); border-radius: 6px; padding: 8px 16px; color: var(--text); cursor: pointer; font-size: 12px; }
+  .sim-copiar-btn:hover { border-color: var(--accent); color: #a78bfa; }
   .money-pos { color: var(--green); font-weight: 700; }
   .money-neg { color: var(--red); font-weight: 700; }
-  /* seletor de período */
-  .period-selector { padding: 14px 24px 0; }
-  .period-group { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-  .period-group .tipo-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; margin-right: 4px; min-width: 62px; }
+  /* seletor de período — barra flutuante, uma linha só, scroll horizontal */
+  .period-selector-wrap { padding: 14px 24px 0; position: sticky; top: 65px; z-index: 40; }
+  .period-selector {
+    display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;
+    overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin;
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 12px;
+    padding: 8px 12px; box-shadow: 0 4px 20px rgba(0,0,0,.25);
+  }
+  .period-selector::-webkit-scrollbar { height: 4px; }
+  .period-group { display: flex; align-items: center; flex-wrap: nowrap; gap: 6px; flex-shrink: 0; }
+  .period-group .tipo-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; margin-right: 2px; flex-shrink: 0; }
+  .period-sep { color: var(--border); flex-shrink: 0; padding: 0 2px; user-select: none; }
+  @media (max-width: 640px) { .period-selector-wrap { top: 57px; padding: 10px 16px 0; } }
   /* banner do período ativo */
   .periodo-banner { margin: 12px 24px 0; padding: 10px 16px; background: rgba(245,158,11,.12); border: 1px solid var(--accent4); border-radius: 8px; color: #fbbf24; font-size: 13px; font-weight: 600; }
+  .update-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .update-banner button { background: #f59e0b; border: none; border-radius: 8px; min-height: 36px; padding: 0 16px; color: #1a1300; font-weight: 700; cursor: pointer; font-size: 12px; flex-shrink: 0; transition: background .15s, transform .1s; }
+  .update-banner button:hover { background: #fbbf24; }
+  .update-banner button:active { transform: scale(.97); }
   /* resumo financeiro */
   .fin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
   .fin-item { background: #1a1d27; border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
@@ -694,16 +866,19 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .fin-item .value { font-size: 18px; font-weight: 700; color: #a78bfa; }
   .fin-item .sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
   /* abas de página (Visão Geral / Blocos) */
-  .page-tabs { display: flex; gap: 8px; padding: 14px 24px 0; border-bottom: 1px solid var(--border); }
-  .page-tab { padding: 8px 20px; border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; font-weight: 700; border-bottom: 2px solid transparent; margin-bottom: -1px; }
-  .page-tab.active { color: #a78bfa; border-bottom-color: var(--accent); }
+  .page-tabs { display: flex; gap: 6px; padding: 16px 24px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+  .page-tab { padding: 10px 20px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; flex-shrink: 0; transition: background .15s, color .15s, border-color .15s; }
+  .page-tab:hover { color: var(--text); background: rgba(124,58,237,.1); border-color: var(--border); }
+  .page-tab.active { color: #fff; background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 4px var(--neon); }
+  @media (max-width: 640px) {
+    .page-tabs { padding: 12px 16px 0; gap: 4px; }
+    .page-tab { padding: 10px 16px; font-size: 13px; }
+  }
   /* histórico — cabeçalho e controles */
   .hist-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 20px 24px 0; }
   .hist-header-info { display: flex; gap: 28px; flex-wrap: wrap; }
   .hist-header-info .label { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
   .hist-header-info b { font-size: 18px; color: #a78bfa; }
-  .hist-atualizar-info { margin: 12px 24px 0; padding: 14px 18px; background: var(--card); border: 1px solid var(--accent); border-radius: 10px; font-size: 13px; color: var(--text); }
-  .hist-atualizar-info pre { background: #0f1117; border-radius: 6px; padding: 10px 12px; margin-top: 8px; font-size: 12px; color: #a78bfa; overflow-x: auto; }
   .hist-controles { margin: 20px 24px 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: end; }
   @media (max-width: 900px) { .hist-controles { grid-template-columns: 1fr; } }
   .hist-controle-grupo label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
@@ -740,15 +915,43 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <div>
-    <h1>🍀 Lotofácil BI</h1>
-    <div class="meta">{subtitulo}</div>
-  </div>
+  <h1>🍀 Lotofácil BI</h1>
+  <div class="concurso-badge"><span class="dot"></span><b>{subtitulo}</b></div>
   <div id="supabase-status" style="display:none;"></div>
 </header>
 
-<div class="period-selector" id="period-selector"></div>
+<div class="period-selector-wrap"><div class="period-selector" id="period-selector"></div></div>
 <div class="periodo-banner" id="periodo-banner" style="display:none;"></div>
+<div class="periodo-banner update-banner" id="update-banner" style="display:none;"></div>
+<div class="gh-feedback" id="gh-feedback" style="display:none;"></div>
+
+<div class="gh-modal-overlay" id="gh-modal-overlay" style="display:none;">
+  <div class="gh-modal">
+    <h3>🔑 Configure seu GitHub Token</h3>
+    <p>Para atualizar direto daqui, você precisa de um token do GitHub com permissão "workflow".</p>
+    <div class="gh-modal-steps">
+      <strong>Como criar:</strong>
+      <ol>
+        <li>Acesse github.com/settings/tokens</li>
+        <li>"Generate new token (classic)"</li>
+        <li>Marque apenas a permissão: workflow</li>
+        <li>Clique em Generate e copie o código</li>
+      </ol>
+    </div>
+    <label for="gh-token-input">Cole seu token aqui:</label>
+    <div class="gh-token-input-wrap">
+      <input type="password" id="gh-token-input" placeholder="ghp_..." autocomplete="off"/>
+      <button type="button" id="gh-token-toggle">👁</button>
+    </div>
+    <div class="gh-modal-aviso">⚠️ Salvo apenas no seu navegador (localStorage). Nunca enviado para nenhum servidor nosso — só direto para a API do GitHub.</div>
+    <div class="gh-modal-erro" id="gh-modal-erro" style="display:none;"></div>
+    <div class="gh-modal-acoes">
+      <button type="button" id="gh-modal-remover" style="display:none;">Remover token</button>
+      <button type="button" id="gh-modal-cancelar">Cancelar</button>
+      <button type="button" id="gh-modal-salvar">Salvar e atualizar</button>
+    </div>
+  </div>
+</div>
 
 <div class="page-tabs">
   <button class="page-tab active" id="page-tab-geral">Visão Geral</button>
@@ -756,33 +959,48 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <button class="page-tab" id="page-tab-historico">Histórico</button>
 </div>
 
-<div id="page-geral">
+<div id="page-geral" class="page-content">
+<!-- Grade interativa 5×5 — substitui o heatmap estático; clique filtra os gráficos abaixo -->
+<div class="grid" style="grid-template-columns: 1fr;">
+  <div class="card numgrid-card">
+    <h2>🎯 Grade interativa — clique nas dezenas para filtrar os gráficos</h2>
+    <div class="numgrid" id="numgrid"></div>
+    <div class="numgrid-footer">
+      <span class="numgrid-hint" id="numgrid-hint">Clique em uma ou mais dezenas para filtrar todos os gráficos abaixo pela combinação escolhida.</span>
+      <button type="button" class="btn-secondary" id="numgrid-limpar" style="display:none;">Limpar seleção</button>
+    </div>
+  </div>
+</div>
 <div class="kpis">
-  <div class="kpi"><div class="label">Sorteios analisados</div><div class="value" id="kpi-total">—</div></div>
-  <div class="kpi"><div class="label">Número mais frequente</div><div class="value" id="kpi-top1">—</div><div class="sub" id="kpi-top1-sub"></div></div>
-  <div class="kpi"><div class="label">Número menos frequente</div><div class="value" id="kpi-bot1">—</div><div class="sub" id="kpi-bot1-sub"></div></div>
-  <div class="kpi"><div class="label">Média pares/sorteio</div><div class="value" id="kpi-pares">—</div></div>
-  <div class="kpi"><div class="label">Soma média das 15 dez.</div><div class="value" id="kpi-soma">—</div></div>
-  <div class="kpi"><div class="label">Maior sequência vista</div><div class="value" id="kpi-seq">—</div><div class="sub">números consecutivos</div></div>
-  <div class="kpi"><div class="label">Repetições do concurso anterior</div><div class="value" id="kpi-repeticao">—</div><div class="sub" id="kpi-repeticao-sub"></div></div>
+  <div class="kpi"><span class="kpi-icon">📊</span><div class="label">Sorteios analisados</div><div class="value" id="kpi-total">—</div></div>
+  <div class="kpi"><span class="kpi-icon">🔥</span><div class="label">Número mais frequente</div><div class="value" id="kpi-top1">—</div><div class="sub" id="kpi-top1-sub"></div></div>
+  <div class="kpi"><span class="kpi-icon">❄️</span><div class="label">Número menos frequente</div><div class="value" id="kpi-bot1">—</div><div class="sub" id="kpi-bot1-sub"></div></div>
+  <div class="kpi"><span class="kpi-icon">⚖️</span><div class="label">Média pares/sorteio</div><div class="value" id="kpi-pares">—</div></div>
+  <div class="kpi"><span class="kpi-icon">➕</span><div class="label">Soma média das 15 dez.</div><div class="value" id="kpi-soma">—</div></div>
+  <div class="kpi"><span class="kpi-icon">🔗</span><div class="label">Maior sequência vista</div><div class="value" id="kpi-seq">—</div><div class="sub">números consecutivos</div></div>
+  <div class="kpi"><span class="kpi-icon">🔁</span><div class="label">Repetições do concurso anterior</div><div class="value" id="kpi-repeticao">—</div><div class="sub" id="kpi-repeticao-sub"></div></div>
 </div>
 
 <!-- Resumo financeiro do período selecionado -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card">
-    <h2>Resumo financeiro (prêmios da faixa 1 — 15 acertos)</h2>
+    <h2>💰 Resumo financeiro (prêmios da faixa 1 — 15 acertos)</h2>
     <div class="fin-grid" id="financeiro-resumo"></div>
   </div>
 </div>
 
-<!-- Heatmap + Pares/Ímpares -->
-<div class="grid grid-13">
+<!-- Frequência + Atraso + Pares/Ímpares -->
+<div class="grid grid-3">
   <div class="card">
-    <h2>Mapa de calor — frequência por dezena</h2>
-    <div class="heatmap" id="heatmap"></div>
+    <h2>📊 Frequência por dezena</h2>
+    <canvas id="chartFreq"></canvas>
   </div>
   <div class="card">
-    <h2>Pares vs. Ímpares</h2>
+    <h2>⏱️ Atraso atual — sorteios sem aparecer</h2>
+    <canvas id="chartAtraso"></canvas>
+  </div>
+  <div class="card">
+    <h2>⚖️ Pares vs. Ímpares</h2>
     <canvas id="chartPI"></canvas>
     <div style="margin-top:14px; display:flex; gap:24px; justify-content:center; font-size:13px;">
       <span><span style="color:#7c3aed">■</span> Pares: <b id="pct-pares">—</b></span>
@@ -791,26 +1009,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   </div>
 </div>
 
-<!-- Frequência bar + Atraso -->
-<div class="grid grid-2">
-  <div class="card">
-    <h2>Frequência por dezena</h2>
-    <canvas id="chartFreq"></canvas>
-  </div>
-  <div class="card">
-    <h2>Atraso atual — sorteios sem aparecer</h2>
-    <canvas id="chartAtraso"></canvas>
-  </div>
-</div>
-
 <!-- Distribuição por faixa + Soma -->
 <div class="grid grid-2">
   <div class="card">
-    <h2>Distribuição por faixa (média por sorteio)</h2>
+    <h2>📈 Distribuição por faixa (média por sorteio)</h2>
     <canvas id="chartFaixas"></canvas>
   </div>
   <div class="card">
-    <h2>Distribuição da soma das 15 dezenas</h2>
+    <h2>➕ Distribuição da soma das 15 dezenas</h2>
     <canvas id="chartSoma"></canvas>
   </div>
 </div>
@@ -818,7 +1024,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- Sequências consecutivas -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card">
-    <h2>Sequências de números consecutivos mais frequentes</h2>
+    <h2>🔗 Sequências de números consecutivos mais frequentes</h2>
     <div class="tabs" id="seq-tabs"></div>
     <div id="seq-contents"></div>
   </div>
@@ -827,15 +1033,15 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- Co-ocorrência + Anti-correlação + Tendência -->
 <div class="grid grid-3">
   <div class="card">
-    <h2>Top 20 pares que mais saíram juntos</h2>
+    <h2>🤝 Top 20 pares que mais saíram juntos</h2>
     <div id="cooc-list" style="overflow-y:auto; max-height:300px;"></div>
   </div>
   <div class="card">
-    <h2>Top 15 pares que menos saíram juntos</h2>
+    <h2>🙅 Top 15 pares que menos saíram juntos</h2>
     <div id="anticorr-list" style="overflow-y:auto; max-height:300px;"></div>
   </div>
   <div class="card">
-    <h2>Tendência — últimos 50 vs. total (% de aparição)</h2>
+    <h2>📉 Tendência — últimos 50 vs. total (% de aparição)</h2>
     <canvas id="chartTend"></canvas>
   </div>
 </div>
@@ -843,11 +1049,11 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- Distribuição de tamanho de sequência -->
 <div class="grid grid-2">
   <div class="card">
-    <h2>Quantos sorteios tiveram sequências de tamanho N</h2>
+    <h2>🔢 Quantos sorteios tiveram sequências de tamanho N</h2>
     <canvas id="chartSeqDist"></canvas>
   </div>
   <div class="card">
-    <h2>Evolução acumulada — top 5 dezenas mais sorteadas</h2>
+    <h2>📈 Evolução acumulada — top 5 dezenas mais sorteadas</h2>
     <canvas id="chartEvolucao"></canvas>
   </div>
 </div>
@@ -855,7 +1061,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- Repetição do concurso anterior + Ciclo médio -->
 <div class="grid grid-2">
   <div class="card">
-    <h2>Repetição do concurso anterior</h2>
+    <h2>🔁 Repetição do concurso anterior</h2>
     <canvas id="chartRepeticao"></canvas>
     <div class="mini-stats">
       <div>Média<b id="rep-media">—</b></div>
@@ -864,7 +1070,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     </div>
   </div>
   <div class="card">
-    <h2>Ciclo médio por dezena (curto → longo)</h2>
+    <h2>🔄 Ciclo médio por dezena (curto → longo)</h2>
     <div id="ciclo-list" style="overflow-y:auto; max-height:340px;"></div>
   </div>
 </div>
@@ -872,11 +1078,11 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- Trios mais frequentes + Grade linha/coluna -->
 <div class="grid grid-2">
   <div class="card">
-    <h2>Top 15 trios mais frequentes</h2>
+    <h2>🔺 Top 15 trios mais frequentes</h2>
     <div id="trios-list" style="overflow-y:auto; max-height:340px;"></div>
   </div>
   <div class="card">
-    <h2>Análise de grade — média de dezenas por linha e coluna</h2>
+    <h2>🎛️ Análise de grade — média de dezenas por linha e coluna</h2>
     <canvas id="chartGrade"></canvas>
   </div>
 </div>
@@ -884,7 +1090,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- Grade heatmap real -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card">
-    <h2>Mapa de calor do volante (grade real 5×5)</h2>
+    <h2>🗂️ Mapa de calor do volante (grade real 5×5)</h2>
     <div class="grade-wrap" id="grade-heatmap"></div>
   </div>
 </div>
@@ -892,7 +1098,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- Números quentes e frios -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card">
-    <h2>Números quentes e frios</h2>
+    <h2>🌡️ Números quentes e frios</h2>
     <div class="window-btns" id="hotcold-btns">
       <button class="tab" data-janela="15">Últimos 15</button>
       <button class="tab active" data-janela="30">Últimos 30</button>
@@ -910,7 +1116,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- Dígitos finais -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card">
-    <h2>Dígitos finais — média por sorteio</h2>
+    <h2>🔟 Dígitos finais — média por sorteio</h2>
     <canvas id="chartDigitos"></canvas>
   </div>
 </div>
@@ -918,11 +1124,27 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- Simulador de aposta -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card">
-    <h2>Simulador de aposta</h2>
-    <div class="sim-box">
-      <input type="text" id="sim-input" placeholder="Digite 15 números separados por vírgula (ex: 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)"/>
-      <button id="sim-btn">Verificar</button>
+    <h2>🎰 Simulador de aposta</h2>
+    <p style="color:var(--muted); font-size:12px; margin-bottom:14px;">
+      Aceita números separados por espaço, vírgula, ponto e vírgula, traço, ponto — ou qualquer mistura (ex: "01, 02 05-06;07").
+    </p>
+
+    <div class="sim-qtd-selector" id="sim-qtd-selector">
+      <span class="sim-qtd-label">Simular</span>
+      <label><input type="radio" name="sim-qtd" value="1" checked> 1 jogo</label>
+      <label><input type="radio" name="sim-qtd" value="5"> 5 jogos</label>
+      <label><input type="radio" name="sim-qtd" value="10"> 10 jogos</label>
+      <label><input type="radio" name="sim-qtd" value="15"> 15 jogos</label>
+      <label><input type="radio" name="sim-qtd" value="30"> 30 jogos</label>
     </div>
+
+    <div id="sim-jogos-lista" class="sim-jogos-lista"></div>
+
+    <div class="sim-acoes">
+      <button id="sim-btn-add" type="button">➕ Adicionar jogo</button>
+      <button id="sim-btn" type="button">Verificar</button>
+    </div>
+
     <div class="sim-error" id="sim-error" style="display:none;"></div>
     <div id="sim-result"></div>
   </div>
@@ -931,7 +1153,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- Meus jogos — ranking -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card" id="jogos-ranking-card">
-    <h2>Meus jogos — ranking comparativo (≥11 acertos)</h2>
+    <h2>🏅 Meus jogos — ranking comparativo (≥11 acertos)</h2>
     <div id="jogos-ranking" style="overflow-x:auto;"></div>
   </div>
 </div>
@@ -939,7 +1161,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- Meus jogos — detalhamento -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card" id="jogos-detalhe-card">
-    <h2>Meus jogos — detalhamento por jogo</h2>
+    <h2>📋 Meus jogos — detalhamento por jogo</h2>
     <div class="tabs" id="jogos-tabs"></div>
     <div id="jogos-contents"></div>
   </div>
@@ -948,7 +1170,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- Jogos sugeridos — ranking -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card" id="jogos-sug-ranking-card">
-    <h2>Jogos sugeridos (30) — ranking comparativo (≥11 acertos)</h2>
+    <h2>✨ Jogos sugeridos (30) — ranking comparativo (≥11 acertos)</h2>
     <p style="color:var(--muted); font-size:12px; margin-bottom:12px;">
       Gerados seguindo os padrões estatísticos do histórico (soma, pares/ímpares, linha/coluna,
       pares e trios frequentes). Isto é autoconsistência estatística, não previsão — a Lotofácil
@@ -961,7 +1183,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- Jogos sugeridos — detalhamento -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card" id="jogos-sug-detalhe-card">
-    <h2>Jogos sugeridos (30) — detalhamento por jogo</h2>
+    <h2>📋 Jogos sugeridos (30) — detalhamento por jogo</h2>
     <div class="tabs" id="jogos-sug-tabs"></div>
     <div id="jogos-sug-contents"></div>
   </div>
@@ -969,27 +1191,27 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
 </div><!-- /page-geral -->
 
-<div id="page-blocos" style="display:none;">
+<div id="page-blocos" class="page-content" style="display:none;">
 
 <div class="kpis">
-  <div class="kpi"><div class="label">Bloco A (01-05) — campeão</div><div class="value" id="kpi-bloco-a">—</div><div class="sub" id="kpi-bloco-a-sub"></div></div>
-  <div class="kpi"><div class="label">Bloco B (06-10) — campeão</div><div class="value" id="kpi-bloco-b">—</div><div class="sub" id="kpi-bloco-b-sub"></div></div>
-  <div class="kpi"><div class="label">Bloco C (11-15) — campeão</div><div class="value" id="kpi-bloco-c">—</div><div class="sub" id="kpi-bloco-c-sub"></div></div>
-  <div class="kpi"><div class="label">Bloco D (16-20) — campeão</div><div class="value" id="kpi-bloco-d">—</div><div class="sub" id="kpi-bloco-d-sub"></div></div>
-  <div class="kpi"><div class="label">Bloco E (21-25) — campeão</div><div class="value" id="kpi-bloco-e">—</div><div class="sub" id="kpi-bloco-e-sub"></div></div>
+  <div class="kpi"><span class="kpi-icon">🏆</span><div class="label">Bloco A (01-05) — campeão</div><div class="value" id="kpi-bloco-a">—</div><div class="sub" id="kpi-bloco-a-sub"></div></div>
+  <div class="kpi"><span class="kpi-icon">🏆</span><div class="label">Bloco B (06-10) — campeão</div><div class="value" id="kpi-bloco-b">—</div><div class="sub" id="kpi-bloco-b-sub"></div></div>
+  <div class="kpi"><span class="kpi-icon">🏆</span><div class="label">Bloco C (11-15) — campeão</div><div class="value" id="kpi-bloco-c">—</div><div class="sub" id="kpi-bloco-c-sub"></div></div>
+  <div class="kpi"><span class="kpi-icon">🏆</span><div class="label">Bloco D (16-20) — campeão</div><div class="value" id="kpi-bloco-d">—</div><div class="sub" id="kpi-bloco-d-sub"></div></div>
+  <div class="kpi"><span class="kpi-icon">🏆</span><div class="label">Bloco E (21-25) — campeão</div><div class="value" id="kpi-bloco-e">—</div><div class="sub" id="kpi-bloco-e-sub"></div></div>
 </div>
 
 <!-- Frequência individual de cada número, dentro do seu bloco -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card">
-    <h2>Frequência de cada número dentro do seu bloco</h2>
+    <h2>🧩 Frequência de cada número dentro do seu bloco</h2>
     <div class="blocos-grid" id="blocos-ranking-grid"></div>
   </div>
 </div>
 
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card">
-    <h2>Campeão e lanterna de cada bloco</h2>
+    <h2>🏆 Campeão e lanterna de cada bloco</h2>
     <div id="blocos-campeoes" style="overflow-x:auto;"></div>
   </div>
 </div>
@@ -997,7 +1219,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- 3.2 Combinações de blocos mais frequentes -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card">
-    <h2>Combinações de distribuição mais frequentes (A-B-C-D-E)</h2>
+    <h2>🧮 Combinações de distribuição mais frequentes (A-B-C-D-E)</h2>
     <div id="blocos-combinacoes" style="overflow-x:auto;"></div>
   </div>
 </div>
@@ -1005,7 +1227,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- 3.5 Co-ocorrência entre blocos -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card">
-    <h2>Co-ocorrência entre blocos (ambos com ≥3 dezenas no mesmo sorteio)</h2>
+    <h2>🔀 Co-ocorrência entre blocos (ambos com ≥3 dezenas no mesmo sorteio)</h2>
     <div class="grade-wrap" id="blocos-coocorrencia" style="grid-template-columns: 60px repeat(5, 1fr);"></div>
   </div>
 </div>
@@ -1013,28 +1235,20 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- 3.3 Heatmap de blocos por período (sempre histórico completo) -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card">
-    <h2>Blocos por período (média mensal — histórico completo)</h2>
+    <h2>🗓️ Blocos por período (média mensal — histórico completo)</h2>
     <div id="blocos-heatmap-periodo" style="overflow-x:auto;"></div>
   </div>
 </div>
 
 </div><!-- /page-blocos -->
 
-<div id="page-historico" style="display:none;">
+<div id="page-historico" class="page-content" style="display:none;">
 
 <div class="hist-header">
   <div class="hist-header-info">
     <div><span class="label">Último sorteio</span><b id="hist-ultimo">—</b></div>
     <div><span class="label">Total</span><b id="hist-total">—</b></div>
   </div>
-  <div>
-    <button class="tab" id="hist-btn-atualizar">🔄 Verificar novos sorteios</button>
-  </div>
-</div>
-<div class="hist-atualizar-info" id="hist-atualizar-info" style="display:none;">
-  O dashboard é estático — para buscar sorteios novos, rode no terminal:
-  <pre>python lotofacil_atualizar.py
-python lotofacil_bi.py --db lotofacil.db</pre>
 </div>
 
 <div class="card hist-controles">
@@ -1093,47 +1307,55 @@ function criarChart(id, config) {
   return chartRegistry[id];
 }
 
+// contador animado (0 → valor) para os KPIs — baseado em nº de frames, não em
+// tempo de relógio, para não travar a barra de progresso em máquinas lentas.
+// Navegadores pausam requestAnimationFrame quando a aba fica em segundo plano
+// (pode ficar parado indefinidamente até o usuário voltar); o setTimeout de
+// segurança garante que o valor final apareça mesmo que isso aconteça no meio
+// da animação.
+function animarContador(el, valorFinal, decimais) {
+  decimais = decimais || 0;
+  el.textContent = decimais ? (0).toFixed(decimais) : '0';
+  const passos = 40;
+  let passoAtual = 0;
+  let concluido = false;
+  function finalizar() {
+    if (concluido) return;
+    concluido = true;
+    el.textContent = decimais ? valorFinal.toFixed(decimais) : String(Math.round(valorFinal));
+  }
+  function frame() {
+    if (concluido) return;
+    passoAtual++;
+    const p = Math.min(1, passoAtual / passos);
+    const eased = 1 - Math.pow(1 - p, 3);
+    const atual = valorFinal * eased;
+    el.textContent = decimais ? atual.toFixed(decimais) : String(Math.round(atual));
+    if (passoAtual < passos) requestAnimationFrame(frame);
+    else finalizar();
+  }
+  requestAnimationFrame(frame);
+  setTimeout(finalizar, 1500);
+}
+
 // ── módulos que reagem ao seletor de período (Tarefa 4) ──────────────────────
 
 function renderKpisPeriodo(bundle) {
   const freq = bundle.frequencia;
   const sorted_freq = Object.entries(freq).map(([d,c])=>({d:+d,c})).sort((a,b)=>b.c-a.c);
-  document.getElementById('kpi-total').textContent = bundle.meta.total;
+  animarContador(document.getElementById('kpi-total'), bundle.meta.total);
   document.getElementById('kpi-top1').textContent = String(sorted_freq[0].d).padStart(2,'0');
   document.getElementById('kpi-top1-sub').textContent = sorted_freq[0].c + ' vezes (' + (sorted_freq[0].c/bundle.meta.total*100).toFixed(1) + '%)';
   document.getElementById('kpi-bot1').textContent = String(sorted_freq[sorted_freq.length-1].d).padStart(2,'0');
   document.getElementById('kpi-bot1-sub').textContent = sorted_freq[sorted_freq.length-1].c + ' vezes (' + (sorted_freq[sorted_freq.length-1].c/bundle.meta.total*100).toFixed(1) + '%)';
   const avgPares = bundle.pares_impares.reduce((a,b)=>a+b.pares,0)/bundle.pares_impares.length;
-  document.getElementById('kpi-pares').textContent = avgPares.toFixed(1);
-  document.getElementById('kpi-soma').textContent = (bundle.somas.reduce((a,b)=>a+b,0)/bundle.somas.length).toFixed(0);
+  animarContador(document.getElementById('kpi-pares'), avgPares, 1);
+  animarContador(document.getElementById('kpi-soma'), bundle.somas.reduce((a,b)=>a+b,0)/bundle.somas.length, 0);
   const maxSeq = Math.max(...Object.keys(bundle.seq_dist_tamanho).map(Number));
-  document.getElementById('kpi-seq').textContent = maxSeq;
+  animarContador(document.getElementById('kpi-seq'), maxSeq, 0);
   const pctPares = (avgPares/15*100).toFixed(1);
   document.getElementById('pct-pares').textContent = pctPares + '%';
   document.getElementById('pct-impares').textContent = (100-pctPares).toFixed(1) + '%';
-}
-
-function renderHeatmap(bundle) {
-  const hm = document.getElementById('heatmap');
-  hm.innerHTML = '';
-  const freq = bundle.frequencia;
-  const total = bundle.meta.total;
-  const vals = Object.values(freq);
-  const minV = Math.min(...vals), maxV = Math.max(...vals);
-  for (let d = 1; d <= 25; d++) {
-    const cnt = freq[d] || 0;
-    const t = maxV > minV ? (cnt - minV) / (maxV - minV) : 0;
-    const r = Math.round(30 + t * 94);
-    const g = Math.round(20 + t * 38);
-    const b = Math.round(100 + t * 130);
-    const cell = document.createElement('div');
-    cell.className = 'heatcell';
-    cell.style.background = `rgb(${r},${g},${b})`;
-    cell.style.color = t > 0.4 ? '#fff' : '#ccc';
-    cell.innerHTML = String(d).padStart(2,'0') + '<span class="freq">' + cnt + '</span>';
-    cell.title = `Dezena ${String(d).padStart(2,'0')}: ${cnt} vezes (${total ? (cnt/total*100).toFixed(1) : '0.0'}%)`;
-    hm.appendChild(cell);
-  }
 }
 
 function renderPI(bundle) {
@@ -1398,7 +1620,6 @@ function renderBlocos(bundle) {
 
 function renderPeriodoCompleto(bundle) {
   renderKpisPeriodo(bundle);
-  renderHeatmap(bundle);
   renderPI(bundle);
   renderChartFreq(bundle);
   renderChartAtraso(bundle);
@@ -1410,6 +1631,198 @@ function renderPeriodoCompleto(bundle) {
   renderChartTend(bundle);
   renderChartEvolucao(bundle);
   renderBlocos(bundle);
+}
+
+// ── grade interativa 5×5 — substitui o heatmap estático da Visão Geral.
+// Clicar em uma ou mais dezenas filtra (semântica "E": só entram sorteios que
+// contêm TODAS as dezenas marcadas) e recalcula, no próprio navegador, os
+// mesmos gráficos que renderPeriodoCompleto já sabe desenhar — por isso essas
+// funções replicam em JS os cálculos que o Python faz por período (frequência,
+// atraso, pares/ímpares etc.): não dá para pré-computar todas as combinações
+// possíveis de dezenas no servidor. blocos/financeiro continuam mostrando o
+// período ativo (não recalculados por combinação de números). ───────────────
+let numerosSelecionados = new Set();
+
+function renderNumGrid(bundle) {
+  const grid = document.getElementById('numgrid');
+  grid.innerHTML = '';
+  const freq = bundle.frequencia;
+  const vals = Object.values(freq);
+  const minV = Math.min(...vals), maxV = Math.max(...vals);
+  for (let d = 1; d <= 25; d++) {
+    const cnt = freq[d] || 0;
+    const t = maxV > minV ? (cnt - minV) / (maxV - minV) : 0;
+    const r = Math.round(30 + t * 94), g = Math.round(20 + t * 38), b = Math.round(100 + t * 130);
+    const cell = document.createElement('div');
+    cell.className = 'numgrid-cell' + (numerosSelecionados.has(d) ? ' selecionada' : '');
+    cell.dataset.num = String(d);
+    cell.style.background = `rgb(${r},${g},${b})`;
+    cell.textContent = String(d).padStart(2, '0');
+    cell.title = `Dezena ${String(d).padStart(2,'0')}: ${cnt} vezes (${bundle.meta.total ? (cnt/bundle.meta.total*100).toFixed(1) : '0.0'}%)`;
+    grid.appendChild(cell);
+  }
+}
+
+function obterIndicesSorteiosDoPeriodo(periodoId) {
+  const meta = DATA.sorteios_meta || [];
+  if (periodoId === '__todos__') return meta.map((_, i) => i);
+  const indices = [];
+  meta.forEach((m, i) => {
+    const partes = (m.data || '').split('/'); // DD/MM/AAAA
+    if (partes.length !== 3) return;
+    const [, mesStr, anoStr] = partes;
+    if (sorteioNoPeriodo(anoStr, +mesStr, periodoId)) indices.push(i);
+  });
+  return indices;
+}
+
+function calcFrequenciaJS(sorteios) {
+  const freq = {};
+  for (let d = 1; d <= 25; d++) freq[d] = 0;
+  sorteios.forEach(s => s.forEach(d => freq[d]++));
+  return freq;
+}
+function calcAtrasoJS(sorteios) {
+  const n = sorteios.length, ultimo = {};
+  sorteios.forEach((s, i) => s.forEach(d => { ultimo[d] = i; }));
+  const atraso = {};
+  for (let d = 1; d <= 25; d++) atraso[d] = (d in ultimo) ? (n - 1 - ultimo[d]) : n;
+  return atraso;
+}
+function calcParesImparesJS(sorteios) {
+  return sorteios.map(s => { const p = s.filter(d => d % 2 === 0).length; return { pares: p, impares: 15 - p }; });
+}
+function calcFaixasJS(sorteios) {
+  return sorteios.map(s => ({
+    baixo: s.filter(d => d >= 1 && d <= 8).length,
+    medio: s.filter(d => d >= 9 && d <= 17).length,
+    alto: s.filter(d => d >= 18 && d <= 25).length,
+  }));
+}
+function calcSomaJS(sorteios) { return sorteios.map(s => s.reduce((a, b) => a + b, 0)); }
+function calcSequenciasJS(sorteios) {
+  const distTamanho = {}, contadorPorTamanho = {};
+  sorteios.forEach(s => {
+    const ordenado = [...s].sort((a, b) => a - b);
+    let atual = [ordenado[0]];
+    const runs = [];
+    for (let i = 1; i < ordenado.length; i++) {
+      if (ordenado[i] === atual[atual.length - 1] + 1) atual.push(ordenado[i]);
+      else { if (atual.length >= 2) runs.push([...atual]); atual = [ordenado[i]]; }
+    }
+    if (atual.length >= 2) runs.push([...atual]);
+    runs.forEach(r => {
+      distTamanho[r.length] = (distTamanho[r.length] || 0) + 1;
+      const key = r.join(',');
+      contadorPorTamanho[r.length] = contadorPorTamanho[r.length] || new Map();
+      contadorPorTamanho[r.length].set(key, (contadorPorTamanho[r.length].get(key) || 0) + 1);
+    });
+  });
+  const topPorTamanho = {};
+  Object.keys(contadorPorTamanho).forEach(tam => {
+    const arr = [...contadorPorTamanho[tam].entries()].map(([k, c]) => ({ seq: k.split(',').map(Number), count: c }));
+    arr.sort((a, b) => b.count - a.count);
+    topPorTamanho[tam] = arr.slice(0, 10);
+  });
+  return { distTamanho, topPorTamanho };
+}
+function calcCoocorrenciaJS(sorteios, topN) {
+  const cont = new Map();
+  sorteios.forEach(s => {
+    const ordenado = [...s].sort((a, b) => a - b);
+    for (let i = 0; i < ordenado.length; i++) for (let j = i + 1; j < ordenado.length; j++) {
+      const key = ordenado[i] + ',' + ordenado[j];
+      cont.set(key, (cont.get(key) || 0) + 1);
+    }
+  });
+  const arr = [...cont.entries()].map(([k, c]) => ({ pair: k.split(',').map(Number), count: c }));
+  arr.sort((a, b) => b.count - a.count);
+  return arr.slice(0, topN || 20).map(x => [x.pair, x.count]);
+}
+function calcTendenciaJS(sorteios) {
+  const n = sorteios.length;
+  const janela = Math.max(1, Math.min(50, n));
+  const freqTotal = calcFrequenciaJS(sorteios);
+  const freqRecente = calcFrequenciaJS(sorteios.slice(-janela));
+  const dados = [];
+  for (let d = 1; d <= 25; d++) {
+    const ft = n ? +(freqTotal[d] / n * 100).toFixed(1) : 0;
+    const fr = +(freqRecente[d] / janela * 100).toFixed(1);
+    dados.push({ d, total: ft, recente: fr, delta: +(fr - ft).toFixed(1) });
+  }
+  return dados;
+}
+function calcEvolucaoJS(sorteios, top5) {
+  const concursos = sorteios.map((_, i) => i + 1);
+  const series = {};
+  top5.forEach(d => {
+    let acc = 0;
+    series[d] = sorteios.map(s => { if (s.includes(d)) acc++; return acc; });
+  });
+  return { dezenas: top5, concursos, series };
+}
+
+function montarBundleFiltradoPorNumeros(sorteios, bundleBase) {
+  const freq = calcFrequenciaJS(sorteios);
+  const top5 = Object.entries(freq).map(([d, c]) => ({ d: +d, c })).sort((a, b) => b.c - a.c).slice(0, 5).map(x => x.d);
+  const { distTamanho, topPorTamanho } = calcSequenciasJS(sorteios);
+  return {
+    meta: { total: sorteios.length },
+    frequencia: freq,
+    atraso: calcAtrasoJS(sorteios),
+    pares_impares: calcParesImparesJS(sorteios),
+    faixas: calcFaixasJS(sorteios),
+    somas: calcSomaJS(sorteios),
+    seq_dist_tamanho: distTamanho,
+    seq_top_por_tamanho: topPorTamanho,
+    coocorrencia: calcCoocorrenciaJS(sorteios, 20),
+    tendencia: calcTendenciaJS(sorteios),
+    evolucao: calcEvolucaoJS(sorteios, top5),
+    blocos: bundleBase.blocos,
+  };
+}
+
+function aplicarFiltroNumeros() {
+  const hint = document.getElementById('numgrid-hint');
+  const btnLimpar = document.getElementById('numgrid-limpar');
+  const bundleBase = resolverBundlePeriodo(periodoAtualId);
+  if (!bundleBase) return;
+  if (numerosSelecionados.size === 0) {
+    btnLimpar.style.display = 'none';
+    hint.textContent = 'Clique em uma ou mais dezenas para filtrar todos os gráficos abaixo pela combinação escolhida.';
+    renderPeriodoCompleto(bundleBase);
+    return;
+  }
+  btnLimpar.style.display = '';
+  const selecionadas = [...numerosSelecionados].sort((a, b) => a - b);
+  const rotulo = selecionadas.map(n => String(n).padStart(2, '0')).join(', ');
+  const indicesPeriodo = obterIndicesSorteiosDoPeriodo(periodoAtualId);
+  const sorteiosFiltrados = indicesPeriodo
+    .map(i => DATA.sorteios_raw[i])
+    .filter(s => selecionadas.every(n => s.includes(n)));
+  if (!sorteiosFiltrados.length) {
+    hint.textContent = `Dezenas ${rotulo}: nenhum sorteio encontrado com essa combinação no período atual.`;
+    return;
+  }
+  hint.textContent = `Dezenas ${rotulo}: ${sorteiosFiltrados.length} sorteio(s) encontrado(s) — gráficos abaixo filtrados por essa combinação.`;
+  renderPeriodoCompleto(montarBundleFiltradoPorNumeros(sorteiosFiltrados, bundleBase));
+}
+
+{
+  const grid = document.getElementById('numgrid');
+  grid.addEventListener('click', (ev) => {
+    const cell = ev.target.closest('.numgrid-cell');
+    if (!cell) return;
+    const n = +cell.dataset.num;
+    if (numerosSelecionados.has(n)) numerosSelecionados.delete(n); else numerosSelecionados.add(n);
+    cell.classList.toggle('selecionada', numerosSelecionados.has(n));
+    aplicarFiltroNumeros();
+  });
+  document.getElementById('numgrid-limpar').addEventListener('click', () => {
+    numerosSelecionados.clear();
+    grid.querySelectorAll('.selecionada').forEach(c => c.classList.remove('selecionada'));
+    aplicarFiltroNumeros();
+  });
 }
 
 // ── financeiro e banner do período — reagem ao seletor junto com o resto ────
@@ -1473,6 +1886,14 @@ function aplicarPeriodo(periodoId) {
   const bundle = resolverBundlePeriodo(periodoId);
   if (!bundle) return;
   periodoAtualId = periodoId;
+  // trocar de período limpa a seleção de dezenas: o filtro numérico é relativo
+  // a UM período por vez, misturar os dois deixaria o "N sorteios encontrados" ambíguo
+  numerosSelecionados.clear();
+  const btnLimpar = document.getElementById('numgrid-limpar');
+  const hint = document.getElementById('numgrid-hint');
+  if (btnLimpar) btnLimpar.style.display = 'none';
+  if (hint) hint.textContent = 'Clique em uma ou mais dezenas para filtrar todos os gráficos abaixo pela combinação escolhida.';
+  renderNumGrid(bundle);
   renderPeriodoCompleto(bundle);
   renderFinanceiro(bundle);
   renderBannerPeriodo(periodoId, bundle);
@@ -1501,6 +1922,10 @@ function aplicarPeriodo(periodoId) {
   tiposOrdem.forEach(tipo => {
     const lista = grupos[tipo];
     if (!lista || !lista.length) return;
+    const sep = document.createElement('span');
+    sep.className = 'period-sep';
+    sep.textContent = '|';
+    container.appendChild(sep);
     const linha = document.createElement('div');
     linha.className = 'period-group';
     const label = document.createElement('span');
@@ -1652,7 +2077,7 @@ function renderChartEvolucao(bundle) {
   document.getElementById('rep-media').textContent = media.toFixed(1);
   document.getElementById('rep-min').textContent = min_r;
   document.getElementById('rep-max').textContent = max_r;
-  document.getElementById('kpi-repeticao').textContent = media.toFixed(1);
+  animarContador(document.getElementById('kpi-repeticao'), media, 1);
   document.getElementById('kpi-repeticao-sub').textContent = 'dezenas repetidas em média';
 
   const dist = new Array(16).fill(0);
@@ -1864,48 +2289,299 @@ function renderChartEvolucao(bundle) {
   list.appendChild(table);
 }
 
-// ── Simulador de aposta ───────────────────────────────────────────────────────
+// ── Simulador de aposta — separadores flexíveis + múltiplos jogos ───────────
+function parseDezenasBrutas(texto) {
+  // mantém tudo (mesmo inválido) para a validação em tempo real conseguir
+  // sinalizar números fora do intervalo
+  return texto.split(/[\s,;.\-]+/).map(s => s.trim()).filter(s => s.length > 0).map(Number);
+}
+function parseDezenas(texto) {
+  return parseDezenasBrutas(texto).filter(n => Number.isInteger(n) && n >= 1 && n <= 25);
+}
+function validarJogoTexto(texto) {
+  const brutas = parseDezenasBrutas(texto);
+  if (!brutas.length) return { status: 'vazio', validos: [] };
+  const foraDeRange = brutas.some(n => !Number.isInteger(n) || n < 1 || n > 25);
+  const validos = brutas.filter(n => Number.isInteger(n) && n >= 1 && n <= 25);
+  const repetidos = new Set(validos).size !== validos.length;
+  if (foraDeRange || repetidos) return { status: 'erro', validos };
+  if (validos.length === 15) return { status: 'ok', validos };
+  return { status: 'parcial', validos };
+}
+
 {
-  const input = document.getElementById('sim-input');
-  const btn = document.getElementById('sim-btn');
+  const listaEl = document.getElementById('sim-jogos-lista');
+  const btnAdd = document.getElementById('sim-btn-add');
+  const btnVerificar = document.getElementById('sim-btn');
   const errEl = document.getElementById('sim-error');
   const resultEl = document.getElementById('sim-result');
   const sorteiosRaw = DATA.sorteios_raw;
+  const sorteiosMeta = DATA.sorteios_meta || [];
 
-  btn.addEventListener('click', () => {
-    errEl.style.display = 'none';
-    resultEl.innerHTML = '';
+  function renumerarJogos() {
+    listaEl.querySelectorAll('.sim-jogo-row').forEach((row, i) => {
+      row.querySelector('.sim-jogo-label').textContent = 'Jogo ' + (i + 1);
+    });
+    // com só 1 jogo, esconde o botão de remover — não faz sentido remover o único campo
+    const rows = listaEl.querySelectorAll('.sim-jogo-row');
+    rows.forEach(row => {
+      row.querySelector('.sim-jogo-remove').style.visibility = rows.length > 1 ? 'visible' : 'hidden';
+    });
+  }
 
-    const nums = input.value.split(',').map(s => s.trim()).filter(s => s !== '').map(Number);
-    if (nums.length !== 15 || nums.some(n => !Number.isInteger(n) || n < 1 || n > 25)) {
-      errEl.textContent = 'Digite exatamente 15 números inteiros entre 1 e 25, separados por vírgula.';
-      errEl.style.display = 'block';
-      return;
+  function atualizarBadge(row) {
+    const inputEl = row.querySelector('.sim-jogo-input');
+    const badge = row.querySelector('.sim-jogo-badge');
+    const v = validarJogoTexto(inputEl.value);
+    badge.classList.remove('ok', 'parcial', 'erro');
+    if (v.status === 'vazio') {
+      badge.textContent = '';
+    } else if (v.status === 'ok') {
+      badge.textContent = '✓ 15/15';
+      badge.classList.add('ok');
+    } else if (v.status === 'erro') {
+      badge.textContent = 'inválido/repetido';
+      badge.classList.add('erro');
+    } else {
+      badge.textContent = `${v.validos.length}/15 números`;
+      badge.classList.add('parcial');
     }
-    if (new Set(nums).size !== 15) {
-      errEl.textContent = 'Os 15 números devem ser distintos.';
-      errEl.style.display = 'block';
-      return;
-    }
+  }
 
-    const aposta = new Set(nums);
+  function criarLinhaJogo() {
+    const row = document.createElement('div');
+    row.className = 'sim-jogo-row';
+
+    const label = document.createElement('span');
+    label.className = 'sim-jogo-label';
+    label.textContent = 'Jogo';
+    row.appendChild(label);
+
+    const inputEl = document.createElement('input');
+    inputEl.type = 'text';
+    inputEl.className = 'sim-jogo-input';
+    inputEl.placeholder = 'ex: 01, 02 05-06;07 09.11 13 15 17 19 21 23 25';
+    inputEl.addEventListener('input', () => atualizarBadge(row));
+    row.appendChild(inputEl);
+
+    const badge = document.createElement('span');
+    badge.className = 'sim-jogo-badge';
+    row.appendChild(badge);
+
+    const btnRemove = document.createElement('button');
+    btnRemove.type = 'button';
+    btnRemove.className = 'sim-jogo-remove';
+    btnRemove.textContent = '🗑️';
+    btnRemove.addEventListener('click', () => {
+      if (listaEl.querySelectorAll('.sim-jogo-row').length <= 1) return;
+      row.remove();
+      renumerarJogos();
+    });
+    row.appendChild(btnRemove);
+
+    return row;
+  }
+
+  function definirQuantidade(n) {
+    listaEl.innerHTML = '';
+    for (let i = 0; i < n; i++) listaEl.appendChild(criarLinhaJogo());
+    renumerarJogos();
+  }
+
+  document.querySelectorAll('#sim-qtd-selector input[name="sim-qtd"]').forEach(radio => {
+    radio.addEventListener('change', () => { if (radio.checked) definirQuantidade(+radio.value); });
+  });
+  btnAdd.addEventListener('click', () => {
+    listaEl.appendChild(criarLinhaJogo());
+    renumerarJogos();
+  });
+
+  definirQuantidade(1); // estado inicial
+
+  function calcularResultado(numeros) {
+    const aposta = new Set(numeros);
     const pontos = new Array(16).fill(0);
-    sorteiosRaw.forEach(s => {
+    const concursosPontuados = [];
+    sorteiosRaw.forEach((s, i) => {
       const acertos = s.filter(d => aposta.has(d)).length;
       pontos[acertos]++;
+      if (acertos >= 11 && sorteiosMeta[i]) {
+        concursosPontuados.push({ concurso: sorteiosMeta[i].concurso, data: sorteiosMeta[i].data, acertos });
+      }
     });
+    concursosPontuados.sort((a, b) => b.concurso - a.concurso);
+    const totalPremios = pontos[11] + pontos[12] + pontos[13] + pontos[14] + pontos[15];
+    const melhorIndividual = concursosPontuados.length ? Math.max(...concursosPontuados.map(c => c.acertos)) : 0;
+    return { numeros, pontos, concursosPontuados, totalPremios, melhorIndividual };
+  }
 
+  function construirDetalhePainel(resultado) {
+    const painel = document.createElement('div');
+    painel.className = 'sim-detalhe-painel';
+    if (!resultado.concursosPontuados.length) {
+      painel.innerHTML = '<span style="color:var(--muted); font-size:12px;">Nenhum concurso com 11+ acertos.</span>';
+      return painel;
+    }
+    resultado.concursosPontuados.forEach(c => {
+      const item = document.createElement('span');
+      item.className = 'sim-detalhe-item';
+      item.textContent = `Concurso ${c.concurso} (${c.data}) — ${c.acertos} pts`;
+      painel.appendChild(item);
+    });
+    return painel;
+  }
+
+  function formatarNumeros(numeros) {
+    return [...numeros].sort((a, b) => a - b).map(n => String(n).padStart(2, '0')).join(' ');
+  }
+
+  let ultimosResultados = []; // guardado para o botão "copiar resultado"
+
+  function renderizarResultadoUnico(resultado) {
     const total = sorteiosRaw.length;
     const table = document.createElement('table');
     table.innerHTML = `<thead><tr><th>Pontos</th><th>Vezes que ocorreu</th><th>% dos sorteios</th></tr></thead>`;
     const tbody = document.createElement('tbody');
     for (let p = 15; p >= 11; p--) {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td class="pontos">${p} pontos</td><td>${pontos[p]}</td><td>${(pontos[p] / total * 100).toFixed(2)}%</td>`;
+      tr.innerHTML = `<td class="pontos">${p} pontos</td><td>${resultado.pontos[p]}</td><td>${(resultado.pontos[p] / total * 100).toFixed(2)}%</td>`;
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
     resultEl.appendChild(table);
+
+    const btnToggle = document.createElement('button');
+    btnToggle.className = 'sim-detalhe-toggle';
+    btnToggle.style.marginTop = '10px';
+    btnToggle.textContent = `Ver em quais concursos pontuou (${resultado.concursosPontuados.length})`;
+    const painel = construirDetalhePainel(resultado);
+    btnToggle.addEventListener('click', () => {
+      painel.classList.toggle('aberto');
+      btnToggle.textContent = painel.classList.contains('aberto')
+        ? 'Esconder concursos'
+        : `Ver em quais concursos pontuou (${resultado.concursosPontuados.length})`;
+    });
+    resultEl.appendChild(btnToggle);
+    resultEl.appendChild(painel);
+  }
+
+  function renderizarResultadoComparativo(resultados) {
+    const maxPremios = Math.max(...resultados.map(r => r.totalPremios));
+    const maxIndividual = Math.max(...resultados.map(r => r.melhorIndividual));
+
+    const table = document.createElement('table');
+    table.innerHTML = `<thead><tr><th>#</th><th>Números</th><th>15pts</th><th>14pts</th><th>13pts</th><th>12pts</th><th>11pts</th><th>Total prêmios</th></tr></thead>`;
+    const tbody = document.createElement('tbody');
+
+    resultados.forEach((r, i) => {
+      const tr = document.createElement('tr');
+      tr.className = 'sim-compare-row';
+      if (r.totalPremios === maxPremios && maxPremios > 0) tr.classList.add('destaque-ouro');
+      const trofeuIndividual = (r.melhorIndividual === maxIndividual && maxIndividual > 0)
+        ? `<span class="sim-trofeu" title="Maior acerto individual entre os jogos simulados">🏆</span>` : '';
+      tr.innerHTML = `
+        <td>Jogo ${i + 1}</td>
+        <td>${formatarNumeros(r.numeros)}</td>
+        <td>${r.pontos[15]}</td>
+        <td>${r.pontos[14]}</td>
+        <td>${r.pontos[13]}</td>
+        <td>${r.pontos[12]}</td>
+        <td>${r.pontos[11]}</td>
+        <td>${r.totalPremios}${trofeuIndividual}</td>`;
+      tbody.appendChild(tr);
+
+      const trDetalhe = document.createElement('tr');
+      const tdDetalhe = document.createElement('td');
+      tdDetalhe.colSpan = 8;
+      const btnToggle = document.createElement('button');
+      btnToggle.className = 'sim-detalhe-toggle';
+      btnToggle.textContent = `Ver em quais concursos pontuou (${r.concursosPontuados.length})`;
+      const painel = construirDetalhePainel(r);
+      btnToggle.addEventListener('click', () => {
+        painel.classList.toggle('aberto');
+        btnToggle.textContent = painel.classList.contains('aberto')
+          ? 'Esconder concursos'
+          : `Ver em quais concursos pontuou (${r.concursosPontuados.length})`;
+      });
+      tdDetalhe.appendChild(btnToggle);
+      tdDetalhe.appendChild(painel);
+      trDetalhe.appendChild(tdDetalhe);
+      tbody.appendChild(trDetalhe);
+    });
+
+    table.appendChild(tbody);
+    resultEl.appendChild(table);
+  }
+
+  function copiarResultado() {
+    if (!ultimosResultados.length) return;
+    let texto;
+    if (ultimosResultados.length === 1) {
+      const r = ultimosResultados[0];
+      texto = `Simulação — ${formatarNumeros(r.numeros)}\n`
+        + `15 pts: ${r.pontos[15]} | 14 pts: ${r.pontos[14]} | 13 pts: ${r.pontos[13]} | `
+        + `12 pts: ${r.pontos[12]} | 11 pts: ${r.pontos[11]} | Total prêmios: ${r.totalPremios}`;
+    } else {
+      const linhas = ['#\tNúmeros\t15pts\t14pts\t13pts\t12pts\t11pts\tTotal prêmios'];
+      ultimosResultados.forEach((r, i) => {
+        linhas.push(`Jogo ${i + 1}\t${formatarNumeros(r.numeros)}\t${r.pontos[15]}\t${r.pontos[14]}\t${r.pontos[13]}\t${r.pontos[12]}\t${r.pontos[11]}\t${r.totalPremios}`);
+      });
+      texto = linhas.join('\n');
+    }
+    navigator.clipboard.writeText(texto).then(() => {
+      btnCopiar.textContent = '✓ Copiado!';
+      setTimeout(() => { btnCopiar.textContent = '📋 Copiar resultado'; }, 2000);
+    }).catch(() => {
+      btnCopiar.textContent = 'Não foi possível copiar';
+      setTimeout(() => { btnCopiar.textContent = '📋 Copiar resultado'; }, 2000);
+    });
+  }
+
+  const btnCopiar = document.createElement('button');
+  btnCopiar.type = 'button';
+  btnCopiar.className = 'sim-copiar-btn';
+  btnCopiar.textContent = '📋 Copiar resultado';
+  btnCopiar.style.display = 'none';
+  btnCopiar.addEventListener('click', copiarResultado);
+
+  btnVerificar.addEventListener('click', () => {
+    errEl.style.display = 'none';
+    resultEl.innerHTML = '';
+    btnCopiar.style.display = 'none';
+
+    const linhas = [...listaEl.querySelectorAll('.sim-jogo-row')];
+    const validacoes = linhas.map(row => validarJogoTexto(row.querySelector('.sim-jogo-input').value));
+    const validos = [];
+    let ignorados = 0;
+    validacoes.forEach(v => {
+      if (v.status === 'ok') validos.push(v.validos);
+      else if (v.status !== 'vazio') ignorados++;
+    });
+
+    if (!validos.length) {
+      errEl.textContent = linhas.length === 1
+        ? 'Digite exatamente 15 números inteiros entre 1 e 25, sem repetição.'
+        : 'Nenhum jogo válido — cada um precisa de exatamente 15 números entre 1 e 25, sem repetição.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    ultimosResultados = validos.map(calcularResultado);
+
+    if (ignorados > 0) {
+      const aviso = document.createElement('div');
+      aviso.className = 'sim-aviso';
+      aviso.textContent = `${ignorados} jogo(s) ignorado(s) por estarem incompletos ou inválidos.`;
+      resultEl.appendChild(aviso);
+    }
+
+    if (ultimosResultados.length === 1) {
+      renderizarResultadoUnico(ultimosResultados[0]);
+    } else {
+      renderizarResultadoComparativo(ultimosResultados);
+    }
+    resultEl.appendChild(btnCopiar);
+    btnCopiar.style.display = 'inline-block';
   });
 }
 
@@ -2276,11 +2952,6 @@ function inicializarHistorico() {
   anosKeys.forEach((anoKey, idx) => construirAno(anoKey, h.arvore[anoKey], raizFrag, idx === 0));
   raiz.appendChild(raizFrag);
 
-  document.getElementById('hist-btn-atualizar').addEventListener('click', () => {
-    const info = document.getElementById('hist-atualizar-info');
-    info.style.display = info.style.display === 'none' ? 'block' : 'none';
-  });
-
   const btnExpandir = document.getElementById('hist-btn-expandir-tudo');
   btnExpandir.addEventListener('click', () => {
     const expandindo = btnExpandir.textContent === 'Expandir tudo';
@@ -2353,19 +3024,153 @@ function inicializarHistorico() {
   aplicarFiltroPeriodoHistorico(periodoAtualId);
 }
 
-// ── Verificação leve de sorteios novos no Supabase ───────────────────────────
+// ── Verificação leve de sorteios novos + botão "Atualizar dados" ────────────
 // Só aparece quando o HTML foi gerado com `--source supabase` (DATA.meta.supabase
 // então tem {url, anon_key} — a anon key é pública por design, protegida por RLS
-// de só-leitura). Não recalcula o dashboard inteiro: só compara o último
-// concurso remoto com o que já está embutido no HTML.
+// de só-leitura). A checagem de novos sorteios não recalcula o dashboard
+// inteiro: só compara o último concurso remoto com o que já está embutido.
+//
+// O botão "Atualizar dados" dispara o workflow do GitHub Actions direto via
+// API, usando um Personal Access Token guardado em localStorage. Isso é um
+// token de acesso amplo à conta do GitHub guardado numa página pública — ver
+// aviso no próprio modal. Ver a conversa anterior para o raciocínio completo
+// sobre esse tradeoff.
+const GH_TOKEN_KEY = 'gh_token';
+function ghGetToken() { return localStorage.getItem(GH_TOKEN_KEY); }
+function ghSetToken(t) { localStorage.setItem(GH_TOKEN_KEY, t); }
+function ghRemoverToken() { localStorage.removeItem(GH_TOKEN_KEY); }
+
+async function dispararWorkflow(token) {
+  const repo = DATA.meta.github_repo;
+  const res = await fetch(
+    `https://api.github.com/repos/${repo}/actions/workflows/atualizar.yml/dispatches`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ref: 'main' }),
+    }
+  );
+  return res.status; // 204 = sucesso, 401 = token inválido, 404 = repo não encontrado
+}
+
 if (DATA.meta.supabase) {
   const wrap = document.getElementById('supabase-status');
   wrap.style.display = 'flex';
 
   const msgEl = document.createElement('span');
   msgEl.className = 'msg';
-  const btn = document.createElement('button');
-  btn.textContent = '🔄 Verificar novos sorteios';
+  const btnVerificar = document.createElement('button');
+  btnVerificar.className = 'btn-secondary';
+  btnVerificar.textContent = '🔍 Verificar novos sorteios';
+
+  const repo = DATA.meta.github_repo;
+  const dot = document.createElement('span');
+  dot.className = 'gh-token-dot';
+  const btnAtualizar = document.createElement('button');
+  btnAtualizar.className = 'btn-primary';
+  btnAtualizar.textContent = '🔄 Atualizar dados';
+  btnAtualizar.title = repo
+    ? 'Dispara o workflow do GitHub Actions'
+    : 'Configure --github-repo ao gerar o dashboard para habilitar este botão';
+  btnAtualizar.disabled = !repo;
+  if (!repo) btnAtualizar.style.opacity = '0.5';
+
+  const btnGear = document.createElement('button');
+  btnGear.className = 'gh-gear-btn';
+  btnGear.textContent = '⚙️';
+  btnGear.title = 'Configurar token do GitHub';
+  btnGear.disabled = !repo;
+
+  const feedbackEl = document.getElementById('gh-feedback');
+  const bannerEl = document.getElementById('update-banner');
+
+  // ── modal de configuração do token ─────────────────────────────────────
+  const overlay = document.getElementById('gh-modal-overlay');
+  const inputToken = document.getElementById('gh-token-input');
+  const btnToggleVisibility = document.getElementById('gh-token-toggle');
+  const modalErro = document.getElementById('gh-modal-erro');
+  const btnModalSalvar = document.getElementById('gh-modal-salvar');
+  const btnModalCancelar = document.getElementById('gh-modal-cancelar');
+  const btnModalRemover = document.getElementById('gh-modal-remover');
+
+  function atualizarDot() {
+    dot.classList.toggle('ativo', !!ghGetToken());
+  }
+
+  function mostrarFeedback(texto, tipo) {
+    feedbackEl.textContent = texto;
+    feedbackEl.className = 'gh-feedback ' + tipo;
+    feedbackEl.style.display = 'block';
+  }
+
+  function abrirModal() {
+    modalErro.style.display = 'none';
+    inputToken.value = '';
+    inputToken.type = 'password';
+    btnModalRemover.style.display = ghGetToken() ? 'inline-block' : 'none';
+    overlay.style.display = 'flex';
+  }
+  function fecharModal() {
+    overlay.style.display = 'none';
+  }
+
+  btnToggleVisibility.addEventListener('click', () => {
+    inputToken.type = inputToken.type === 'password' ? 'text' : 'password';
+  });
+  btnModalCancelar.addEventListener('click', fecharModal);
+  btnModalRemover.addEventListener('click', () => {
+    ghRemoverToken();
+    atualizarDot();
+    fecharModal();
+  });
+  btnModalSalvar.addEventListener('click', () => {
+    const val = inputToken.value.trim();
+    if (!val) {
+      modalErro.textContent = 'Cole um token válido.';
+      modalErro.style.display = 'block';
+      return;
+    }
+    ghSetToken(val);
+    atualizarDot();
+    fecharModal();
+    acionarAtualizacao();
+  });
+  btnGear.addEventListener('click', abrirModal);
+
+  // ── disparo do workflow ──────────────────────────────────────────────────
+  async function acionarAtualizacao() {
+    if (!repo) return;
+    const token = ghGetToken();
+    if (!token) { abrirModal(); return; }
+
+    feedbackEl.style.display = 'none';
+    btnAtualizar.disabled = true;
+    btnAtualizar.textContent = '⏳ Disparando...';
+    try {
+      const status = await dispararWorkflow(token);
+      if (status === 204) {
+        btnAtualizar.textContent = '✓ Atualização iniciada!';
+        mostrarFeedback('O GitHub Actions está rodando. Aguarde ~2 minutos e recarregue a página para ver os dados novos.', 'ok');
+      } else if (status === 401) {
+        btnAtualizar.textContent = '❌ Token inválido';
+        mostrarFeedback('Token inválido ou expirado. Clique em ⚙️ para configurar um novo.', 'erro');
+      } else {
+        btnAtualizar.textContent = '❌ Erro';
+        mostrarFeedback(`Erro ao disparar o workflow (código ${status}).`, 'erro');
+      }
+    } catch (e) {
+      btnAtualizar.textContent = '❌ Erro';
+      mostrarFeedback('Erro de rede ao chamar a API do GitHub: ' + e.message, 'erro');
+    } finally {
+      btnAtualizar.disabled = false;
+      setTimeout(() => { btnAtualizar.textContent = '🔄 Atualizar dados'; }, 5000);
+    }
+  }
 
   async function verificarNovosSorteios() {
     msgEl.textContent = 'Verificando…';
@@ -2380,25 +3185,44 @@ if (DATA.meta.supabase) {
       const agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       if (!res.ok || !dados || !dados.length) {
         msgEl.textContent = `Não foi possível consultar o Supabase (verificado às ${agora})`;
+        bannerEl.style.display = 'none';
         return;
       }
       const ultimoRemoto = +dados[0].concurso;
       const ultimoAtual = +DATA.meta.concurso_fim;
       if (ultimoRemoto > ultimoAtual) {
-        msgEl.textContent = `Novo concurso disponível: ${ultimoRemoto} (${dados[0].data_br}) — regenere o dashboard para atualizar`;
+        msgEl.textContent = `Novo concurso disponível: ${ultimoRemoto} (${dados[0].data_br})`;
         msgEl.className = 'msg novo';
+
+        bannerEl.innerHTML = '';
+        const texto = document.createElement('span');
+        texto.textContent = `⚠️ Existe um sorteio mais recente disponível (concurso ${ultimoRemoto}, ${dados[0].data_br}). Clique em Atualizar para buscar.`;
+        const btnBanner = document.createElement('button');
+        btnBanner.textContent = '🔄 Atualizar agora';
+        btnBanner.disabled = !repo;
+        btnBanner.addEventListener('click', acionarAtualizacao);
+        bannerEl.appendChild(texto);
+        bannerEl.appendChild(btnBanner);
+        bannerEl.style.display = 'flex';
       } else {
         msgEl.textContent = `Atualizado em ${agora} — nenhum concurso novo`;
         msgEl.className = 'msg atualizado';
+        bannerEl.style.display = 'none';
       }
     } catch (e) {
       msgEl.textContent = 'Erro ao verificar: ' + e.message;
+      bannerEl.style.display = 'none';
     }
   }
 
-  btn.addEventListener('click', verificarNovosSorteios);
+  btnVerificar.addEventListener('click', verificarNovosSorteios);
+  btnAtualizar.addEventListener('click', acionarAtualizacao);
+  atualizarDot();
   wrap.appendChild(msgEl);
-  wrap.appendChild(btn);
+  wrap.appendChild(btnVerificar);
+  wrap.appendChild(dot);
+  wrap.appendChild(btnAtualizar);
+  wrap.appendChild(btnGear);
   verificarNovosSorteios();
 }
 </script>
@@ -2406,7 +3230,7 @@ if (DATA.meta.supabase) {
 </html>
 """
 
-def gerar_html(rows: list[dict], output: str, fonte_supabase: dict | None = None):
+def gerar_html(rows: list[dict], output: str, fonte_supabase: dict | None = None, github_repo: str | None = None):
     sorteios = [dezenas(r) for r in rows]
     n = len(sorteios)
 
@@ -2444,6 +3268,7 @@ def gerar_html(rows: list[dict], output: str, fonte_supabase: dict | None = None
             "concurso_ini": rows[0]["concurso"],
             "concurso_fim": rows[-1]["concurso"],
             "supabase": fonte_supabase,  # {"url","anon_key"} se gerado com --source supabase, senão None
+            "github_repo": github_repo,  # "dono/repositorio", usado só pro link do botão Atualizar dados
         },
         "frequencia": {d: c for d, c in freq.items()},
         "atraso": atraso,
@@ -2466,6 +3291,7 @@ def gerar_html(rows: list[dict], output: str, fonte_supabase: dict | None = None
         "digitos_finais": digitos_finais,
         "anticorrelacao": [[[a, b], c] for (a, b), c in anticorrelacao],
         "sorteios_raw": sorteios,
+        "sorteios_meta": [{"concurso": r["concurso"], "data": r["data"]} for r in rows],
         "meus_jogos": meus_jogos,
         "jogos_sugeridos": jogos_sugeridos,
         "blocos": blocos,
@@ -2478,7 +3304,7 @@ def gerar_html(rows: list[dict], output: str, fonte_supabase: dict | None = None
 
     from datetime import datetime
     titulo = f"{n} sorteios — concursos {rows[0]['concurso']} a {rows[-1]['concurso']}"
-    subtitulo = f"{rows[0]['data']} → {rows[-1]['data']} | {n} sorteios analisados"
+    subtitulo = f"Concurso {rows[-1]['concurso']} · {rows[-1]['data']} · {n} sorteios analisados"
     gerado_em = f"Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')}"
 
     html = (HTML_TEMPLATE
@@ -2551,6 +3377,8 @@ if __name__ == "__main__":
                          help="--source supabase lê do Supabase em vez do SQLite/CSV")
     parser.add_argument("--supabase-url", default=None, help="Necessário só se SUPABASE_URL não estiver no ambiente/.env")
     parser.add_argument("--supabase-key", default=None, help="Necessário só se SUPABASE_ANON_KEY não estiver no ambiente/.env")
+    parser.add_argument("--github-repo", default="andrevisc-1209/lotofacil-bi",
+                         help="dono/repositorio — usado só para linkar o botão 'Atualizar dados' à página Run workflow do GitHub Actions")
     parser.add_argument("--periodo", default=None, help="Filtra os dados antes de gerar o dashboard (ex: 2025, 2025-06)")
     parser.add_argument("--output", default="index.html")
     args = parser.parse_args()
@@ -2603,4 +3431,4 @@ if __name__ == "__main__":
             print("Nenhum sorteio encontrado para esse período.")
             exit(1)
 
-    gerar_html(rows, args.output, fonte_supabase=fonte_supabase)
+    gerar_html(rows, args.output, fonte_supabase=fonte_supabase, github_repo=args.github_repo)
