@@ -1406,6 +1406,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     </div>
 
     <div class="sim-error" id="sim-error" style="display:none;"></div>
+    <div class="sim-aviso" id="sim-periodo-aviso" style="display:none;">⚠ O período mudou. Clique em Verificar para recalcular.</div>
     <div id="sim-result"></div>
   </div>
 </div>
@@ -2260,6 +2261,19 @@ function renderJogos(bundle, periodoId) {
   }
   renderJogosResumoLotomania(jogos, bundle.meta.total, labelPeriodoParaJogos(periodoId));
   renderJogosTabelaLotomania(jogos);
+  marcarSimuladorLotomaniaDesatualizado();
+}
+
+// avisa o simulador ad hoc (números digitados livremente) que o resultado
+// mostrado não corresponde mais ao período ativo — ele só recalcula sob
+// clique em "Verificar", nunca sozinho, então sem isso o resultado ficaria
+// visualmente correto mas silenciosamente desatualizado após trocar período.
+function marcarSimuladorLotomaniaDesatualizado() {
+  const resultEl = document.getElementById('sim-result');
+  const avisoEl = document.getElementById('sim-periodo-aviso');
+  if (resultEl && avisoEl && resultEl.children.length > 0) {
+    avisoEl.style.display = 'block';
+  }
 }
 
 function renderPeriodoCompleto(bundle) {
@@ -3061,12 +3075,18 @@ function parseDezenasBrutasLotomania(texto) {
 function validarJogoTextoLotomania(texto) {
   const brutas = parseDezenasBrutasLotomania(texto);
   if (!brutas.length) return { status: 'vazio', validos: [] };
-  const foraDeRange = brutas.some(n => !Number.isInteger(n) || n < 0 || n > 99);
-  const validos = brutas.filter(n => Number.isInteger(n) && n >= 0 && n <= 99);
-  const repetidos = new Set(validos).size !== validos.length;
-  if (foraDeRange || repetidos) return { status: 'erro', validos };
-  if (validos.length === 50) return { status: 'ok', validos };
-  return { status: 'parcial', validos };
+  for (const n of brutas) {
+    if (!Number.isInteger(n) || n < 0 || n > 99) {
+      return { status: 'erro', motivo: 'range', numero: n, validos: [] };
+    }
+  }
+  const vistos = new Set();
+  for (const n of brutas) {
+    if (vistos.has(n)) return { status: 'erro', motivo: 'repetido', numero: n, validos: [] };
+    vistos.add(n);
+  }
+  if (brutas.length === 50) return { status: 'ok', validos: brutas };
+  return { status: 'parcial', validos: brutas, count: brutas.length };
 }
 
 {
@@ -3097,7 +3117,9 @@ function validarJogoTextoLotomania(texto) {
       badge.textContent = '✓ 50/50';
       badge.classList.add('ok');
     } else if (v.status === 'erro') {
-      badge.textContent = 'inválido/repetido';
+      badge.textContent = v.motivo === 'repetido'
+        ? `nº ${String(v.numero).padStart(2,'0')} repetido`
+        : `nº ${String(v.numero).padStart(2,'0')} inválido`;
       badge.classList.add('erro');
     } else {
       badge.textContent = `${v.validos.length}/50 números`;
@@ -3337,6 +3359,7 @@ function validarJogoTextoLotomania(texto) {
     errEl.style.display = 'none';
     resultEl.innerHTML = '';
     btnCopiar.style.display = 'none';
+    document.getElementById('sim-periodo-aviso').style.display = 'none';
 
     const linhas = [...listaEl.querySelectorAll('.sim-jogo-row')];
     const validacoes = linhas.map(row => validarJogoTextoLotomania(row.querySelector('.sim-jogo-input').value));
@@ -3348,9 +3371,20 @@ function validarJogoTextoLotomania(texto) {
     });
 
     if (!validos.length) {
-      errEl.textContent = linhas.length === 1
-        ? 'Informe exatamente 50 números entre 00 e 99, sem repetição.'
-        : 'Nenhum jogo válido — cada um precisa de exatamente 50 números entre 00 e 99, sem repetição.';
+      if (linhas.length === 1) {
+        const v = validacoes[0];
+        if (v.status === 'erro' && v.motivo === 'range') {
+          errEl.textContent = `Número ${String(v.numero).padStart(2,'0')} inválido — use valores entre 00 e 99.`;
+        } else if (v.status === 'erro' && v.motivo === 'repetido') {
+          errEl.textContent = `Número ${String(v.numero).padStart(2,'0')} repetido.`;
+        } else if (v.status === 'parcial') {
+          errEl.textContent = `Informe exatamente 50 números (você informou ${v.count}).`;
+        } else {
+          errEl.textContent = 'Informe exatamente 50 números entre 00 e 99, sem repetição.';
+        }
+      } else {
+        errEl.textContent = 'Nenhum jogo válido — cada um precisa de exatamente 50 números entre 00 e 99, sem repetição.';
+      }
       errEl.style.display = 'block';
       return;
     }
