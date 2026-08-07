@@ -1,0 +1,39 @@
+name: Atualizar Mega-Sena
+
+on:
+  schedule:
+    - cron: '0 23 * * 3,6'   # Quarta e Sábado às 23h UTC (após o sorteio das 20h)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Atualizar banco
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python megasena_atualizar.py
+
+      - name: Gerar dashboard
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: python megasena_bi.py --source supabase
+
+      - name: Commit e push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add megasena.html
+          git diff --staged --quiet || git commit -m "chore: atualiza Mega-Sena $(date '+%d/%m/%Y')"
+          git push

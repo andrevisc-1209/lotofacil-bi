@@ -28,12 +28,27 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: python lotofacil_bi.py --source supabase
+        run: python lotofacil_bi.py --source supabase --output lotofacil.html
+
+      - name: Adicionar link "Voltar ao menu"
+        # lotofacil_bi.py não sabe da página de menu (index.html) — não mexemos
+        # no template Python, só injetamos o link no HTML já gerado.
+        run: |
+          python3 -c "
+          with open('lotofacil.html', encoding='utf-8') as f:
+              html = f.read()
+          link = '<a href=\"index.html\" style=\"margin-left:auto;color:#a78bfa;text-decoration:none;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px;\">← Menu</a>'
+          old = '<div id=\"supabase-status\" style=\"display:none;\"></div>'
+          if link not in html and old in html:
+              html = html.replace(old, link + old, 1)
+              with open('lotofacil.html', 'w', encoding='utf-8') as f:
+                  f.write(html)
+          "
 
       - name: Publicar no GitHub Pages
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add lotofacil_bi.html
-          git diff --staged --quiet || git commit -m "chore: atualiza $(date '+%d/%m/%Y %H:%M')"
+          git add lotofacil.html
+          git diff --staged --quiet || git commit -m "chore: atualiza Lotofácil $(date '+%d/%m/%Y %H:%M')"
           git push
