@@ -343,8 +343,10 @@ MESES_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out"
 def calcular_bundle_periodo(rows_p, sorteios_p):
     """Estatísticas completas de um período do seletor: heatmap/frequência,
     pares/ímpares, atraso (relativo ao próprio período), sequências, co-ocorrência,
-    tendência, soma, faixas, evolução, blocos e financeiro — mesmo conjunto de
-    módulos exibido para 'Todos', só que recalculado sobre o subconjunto de sorteios."""
+    tendência, soma, faixas, evolução, blocos, financeiro, repetição do concurso
+    anterior, ciclo médio, trios, grade linha/coluna, dígitos finais e
+    anti-correlação — mesmo conjunto de módulos exibido para 'Todos', só que
+    recalculado sobre o subconjunto de sorteios do período."""
     n = len(sorteios_p)
     freq = calc_frequencia(sorteios_p)
     atraso = calc_atraso(sorteios_p)
@@ -356,6 +358,13 @@ def calcular_bundle_periodo(rows_p, sorteios_p):
     tendencia = calc_tendencia(sorteios_p, janela=janela)
     somas = calc_soma(sorteios_p)
     evolucao = calc_numero_por_sorteio_historico(rows_p, sorteios_p)
+    repeticao_anterior = calc_repeticao_anterior(sorteios_p)
+    ciclo_medio = calc_ciclo_medio(sorteios_p)
+    trios = calc_trios_frequentes(sorteios_p, top_n=15)
+    grade = calc_grade(sorteios_p)
+    digitos_finais = calc_digitos_finais(sorteios_p)
+    cooc_completo_p = calc_coocorrencia_completa(sorteios_p)
+    anticorrelacao = calc_anticorrelacao(cooc_completo_p, bottom_n=15)
 
     return {
         "meta": {
@@ -379,6 +388,12 @@ def calcular_bundle_periodo(rows_p, sorteios_p):
         },
         "blocos": calc_blocos_bundle(rows_p, sorteios_p),
         "financeiro": calc_financeiro(rows_p),
+        "repeticao_anterior": repeticao_anterior,
+        "ciclo_medio": ciclo_medio,
+        "trios": trios,
+        "grade": grade,
+        "digitos_finais": digitos_finais,
+        "anticorrelacao": [[[a, b], c] for (a, b), c in anticorrelacao],
     }
 
 def gerar_periodos(rows, sorteios):
@@ -1128,8 +1143,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
       <button class="tab" data-janela="50">Últimos 50</button>
     </div>
     <div class="hotcold-legend">
-      <span>🔥 Quente: ≥20% acima da média histórica</span>
-      <span>❄️ Frio: ≥20% abaixo da média histórica</span>
+      <span>🔥 Quente: ≥20% acima da média do período</span>
+      <span>❄️ Frio: ≥20% abaixo da média do período</span>
       <span>~ Normal: dentro da faixa</span>
     </div>
     <div class="hotcold-grid" id="hotcold-grid"></div>
@@ -1654,6 +1669,13 @@ function renderPeriodoCompleto(bundle) {
   renderChartTend(bundle);
   renderChartEvolucao(bundle);
   renderBlocos(bundle);
+  renderRepeticao(bundle);
+  renderCicloMedio(bundle);
+  renderTrios(bundle);
+  renderGrade(bundle);
+  renderDigitosFinais(bundle);
+  renderAntiCorr(bundle);
+  renderHotCold(bundle, hotcoldJanelaAtual);
 }
 
 // ── grade interativa 5×5 — substitui o heatmap estático da Visão Geral.
@@ -1665,6 +1687,11 @@ function renderPeriodoCompleto(bundle) {
 // possíveis de dezenas no servidor. blocos/financeiro continuam mostrando o
 // período ativo (não recalculados por combinação de números). ───────────────
 let numerosSelecionados = new Set();
+// janela de recência (dias) do card "Números quentes e frios" — declarada aqui
+// (não lá embaixo, perto do resto do bloco) pelo mesmo motivo do TDZ já
+// documentado para historicoInicializado: renderPeriodoCompleto() já chama
+// renderHotCold() na primeira execução, antes do bloco original ser lido.
+let hotcoldJanelaAtual = 30;
 
 function renderNumGrid(bundle) {
   const grid = document.getElementById('numgrid');
@@ -1784,6 +1811,79 @@ function calcEvolucaoJS(sorteios, top5) {
   });
   return { dezenas: top5, concursos, series };
 }
+function calcRepeticaoAnteriorJS(sorteios) {
+  const rep = [];
+  for (let i = 1; i < sorteios.length; i++) {
+    const anterior = new Set(sorteios[i - 1]);
+    rep.push(sorteios[i].filter(d => anterior.has(d)).length);
+  }
+  return rep;
+}
+function calcCicloMedioJS(sorteios) {
+  const indices = {};
+  sorteios.forEach((s, i) => s.forEach(d => { (indices[d] = indices[d] || []).push(i); }));
+  const resultado = {};
+  for (let d = 1; d <= 25; d++) {
+    const idx = indices[d] || [];
+    const intervalos = [];
+    for (let k = 1; k < idx.length; k++) intervalos.push(idx[k] - idx[k - 1]);
+    resultado[d] = {
+      ciclo: intervalos.length ? +(intervalos.reduce((a, b) => a + b, 0) / intervalos.length).toFixed(1) : null,
+      aparicoes: idx.length,
+    };
+  }
+  return resultado;
+}
+function calcTriosJS(sorteios, topN) {
+  const n = sorteios.length;
+  const cont = new Map();
+  sorteios.forEach(s => {
+    const ordenado = [...s].sort((a, b) => a - b);
+    for (let i = 0; i < ordenado.length; i++)
+      for (let j = i + 1; j < ordenado.length; j++)
+        for (let k = j + 1; k < ordenado.length; k++) {
+          const key = ordenado[i] + ',' + ordenado[j] + ',' + ordenado[k];
+          cont.set(key, (cont.get(key) || 0) + 1);
+        }
+  });
+  const arr = [...cont.entries()].map(([k, c]) => ({ trio: k.split(',').map(Number), count: c, pct: +(c / n * 100).toFixed(1) }));
+  arr.sort((a, b) => b.count - a.count);
+  return arr.slice(0, topN || 15);
+}
+function calcGradeJS(sorteios) {
+  const linha = d => Math.floor((d - 1) / 5) + 1;
+  const coluna = d => (d - 1) % 5 + 1;
+  const linhasSoma = {}, colunasSoma = {};
+  for (let i = 1; i <= 5; i++) { linhasSoma[i] = 0; colunasSoma[i] = 0; }
+  sorteios.forEach(s => s.forEach(d => { linhasSoma[linha(d)]++; colunasSoma[coluna(d)]++; }));
+  const n = sorteios.length;
+  return {
+    linhas: [1, 2, 3, 4, 5].map(r => +(linhasSoma[r] / n).toFixed(2)),
+    colunas: [1, 2, 3, 4, 5].map(c => +(colunasSoma[c] / n).toFixed(2)),
+  };
+}
+function calcDigitosFinaisJS(sorteios) {
+  const n = sorteios.length;
+  const total = {};
+  for (let dig = 0; dig <= 9; dig++) total[dig] = 0;
+  sorteios.forEach(s => s.forEach(d => { total[d % 10]++; }));
+  const media = {};
+  for (let dig = 0; dig <= 9; dig++) media[dig] = +(total[dig] / n).toFixed(2);
+  return { total, media_por_sorteio: media };
+}
+function calcAntiCorrelacaoJS(sorteios, bottomN) {
+  const cont = new Map();
+  sorteios.forEach(s => {
+    const ordenado = [...s].sort((a, b) => a - b);
+    for (let i = 0; i < ordenado.length; i++) for (let j = i + 1; j < ordenado.length; j++) {
+      const key = ordenado[i] + ',' + ordenado[j];
+      cont.set(key, (cont.get(key) || 0) + 1);
+    }
+  });
+  const arr = [...cont.entries()].map(([k, c]) => [k.split(',').map(Number), c]);
+  arr.sort((a, b) => a[1] - b[1]);
+  return arr.slice(0, bottomN || 15);
+}
 
 function montarBundleFiltradoPorNumeros(sorteios, bundleBase) {
   const freq = calcFrequenciaJS(sorteios);
@@ -1802,6 +1902,12 @@ function montarBundleFiltradoPorNumeros(sorteios, bundleBase) {
     tendencia: calcTendenciaJS(sorteios),
     evolucao: calcEvolucaoJS(sorteios, top5),
     blocos: bundleBase.blocos,
+    repeticao_anterior: calcRepeticaoAnteriorJS(sorteios),
+    ciclo_medio: calcCicloMedioJS(sorteios),
+    trios: calcTriosJS(sorteios, 15),
+    grade: calcGradeJS(sorteios),
+    digitos_finais: calcDigitosFinaisJS(sorteios),
+    anticorrelacao: calcAntiCorrelacaoJS(sorteios, 15),
   };
 }
 
@@ -2110,20 +2216,19 @@ function renderChartEvolucao(bundle) {
   });
 }
 
-// ── Repetição do concurso anterior ───────────────────────────────────────────
-{
-  const rep = DATA.repeticao_anterior;
-  const media = rep.reduce((a,b)=>a+b,0) / rep.length;
-  const min_r = Math.min(...rep), max_r = Math.max(...rep);
+// ── Repetição do concurso anterior — agora period-aware ─────────────────────
+function renderRepeticao(bundle) {
+  const rep = bundle.repeticao_anterior;
+  const media = rep.length ? rep.reduce((a,b)=>a+b,0) / rep.length : 0;
   document.getElementById('rep-media').textContent = media.toFixed(1);
-  document.getElementById('rep-min').textContent = min_r;
-  document.getElementById('rep-max').textContent = max_r;
+  document.getElementById('rep-min').textContent = rep.length ? Math.min(...rep) : 0;
+  document.getElementById('rep-max').textContent = rep.length ? Math.max(...rep) : 0;
   animarContador(document.getElementById('kpi-repeticao'), media, 1);
   document.getElementById('kpi-repeticao-sub').textContent = 'dezenas repetidas em média';
 
   const dist = new Array(16).fill(0);
   rep.forEach(v => dist[v]++);
-  new Chart(C('chartRepeticao'), {
+  criarChart('chartRepeticao', {
     type: 'bar',
     data: {
       labels: dist.map((_,i) => String(i)),
@@ -2133,14 +2238,19 @@ function renderChartEvolucao(bundle) {
   });
 }
 
-// ── Ciclo médio por dezena ───────────────────────────────────────────────────
-{
+// ── Ciclo médio por dezena — agora period-aware ──────────────────────────────
+function renderCicloMedio(bundle) {
   const list = document.getElementById('ciclo-list');
-  const atrasoMap = DATA.atraso;
-  const items = Object.entries(DATA.ciclo_medio)
+  list.innerHTML = '';
+  const atrasoMap = bundle.atraso;
+  const items = Object.entries(bundle.ciclo_medio)
     .map(([d, v]) => ({ d: +d, ciclo: v.ciclo, aparicoes: v.aparicoes, atraso: atrasoMap[d] }))
     .filter(x => x.ciclo !== null)
     .sort((a, b) => a.ciclo - b.ciclo);
+  if (!items.length) {
+    list.innerHTML = '<p style="color:var(--muted)">Sem dados suficientes neste período (nenhuma dezena repetiu).</p>';
+    return;
+  }
   const maxCiclo = Math.max(...items.map(x => x.ciclo));
 
   const table = document.createElement('table');
@@ -2161,10 +2271,15 @@ function renderChartEvolucao(bundle) {
   list.appendChild(table);
 }
 
-// ── Trios mais frequentes ────────────────────────────────────────────────────
-{
+// ── Trios mais frequentes — agora period-aware ───────────────────────────────
+function renderTrios(bundle) {
   const list = document.getElementById('trios-list');
-  const items = DATA.trios;
+  list.innerHTML = '';
+  const items = bundle.trios;
+  if (!items.length) {
+    list.innerHTML = '<p style="color:var(--muted)">Sem dados suficientes neste período.</p>';
+    return;
+  }
   const table = document.createElement('table');
   table.innerHTML = `<thead><tr><th>#</th><th>Trio</th><th>Aparições</th><th>% sorteios</th></tr></thead>`;
   const tbody = document.createElement('tbody');
@@ -2182,28 +2297,26 @@ function renderChartEvolucao(bundle) {
   list.appendChild(table);
 }
 
-// ── Grade — linhas e colunas ─────────────────────────────────────────────────
-{
-  new Chart(C('chartGrade'), {
+// ── Grade (linhas/colunas + mapa de calor do volante) — agora period-aware ──
+function renderGrade(bundle) {
+  criarChart('chartGrade', {
     type: 'bar',
     data: {
       labels: ['Posição 1', 'Posição 2', 'Posição 3', 'Posição 4', 'Posição 5'],
       datasets: [
-        { label: 'Linha (média/sorteio)', data: DATA.grade.linhas, backgroundColor: '#7c3aed', borderRadius: 4 },
-        { label: 'Coluna (média/sorteio)', data: DATA.grade.colunas, backgroundColor: '#06b6d4', borderRadius: 4 }
+        { label: 'Linha (média/sorteio)', data: bundle.grade.linhas, backgroundColor: '#7c3aed', borderRadius: 4 },
+        { label: 'Coluna (média/sorteio)', data: bundle.grade.colunas, backgroundColor: '#06b6d4', borderRadius: 4 }
       ]
     },
     options: { ...chartDefaults, plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } } }
   });
-}
 
-// ── Grade — mapa de calor real 5×5 ───────────────────────────────────────────
-{
   const wrap = document.getElementById('grade-heatmap');
-  const vals = Object.values(DATA.frequencia);
+  wrap.innerHTML = '';
+  const vals = Object.values(bundle.frequencia);
   const minV = Math.min(...vals), maxV = Math.max(...vals);
   const colorFor = cnt => {
-    const t = (cnt - minV) / (maxV - minV);
+    const t = maxV > minV ? (cnt - minV) / (maxV - minV) : 0;
     const r = Math.round(30 + t * 94), g = Math.round(20 + t * 38), b = Math.round(100 + t * 130);
     return { bg: `rgb(${r},${g},${b})`, fg: t > 0.4 ? '#fff' : '#ccc' };
   };
@@ -2222,7 +2335,7 @@ function renderChartEvolucao(bundle) {
     wrap.appendChild(h);
     for (let c = 1; c <= 5; c++) {
       const d = (r - 1) * 5 + c;
-      const cnt = DATA.frequencia[d] || 0;
+      const cnt = bundle.frequencia[d] || 0;
       const { bg, fg } = colorFor(cnt);
       const cell = document.createElement('div');
       cell.className = 'heatcell';
@@ -2235,61 +2348,64 @@ function renderChartEvolucao(bundle) {
   }
 }
 
-// ── Números quentes e frios ──────────────────────────────────────────────────
-{
+// ── Números quentes e frios — agora period-aware: a janela de recência (15/30/50
+// últimos sorteios) passa a olhar só os sorteios DENTRO do período ativo, e a
+// linha de base de comparação também vira a frequência do próprio período (não
+// mais o histórico geral). Reaproveita obterIndicesSorteiosDoPeriodo(), já usado
+// pela grade interativa, pra não duplicar a lógica de filtrar por período. ──────
+function renderHotCold(bundle, janela) {
+  hotcoldJanelaAtual = janela;
   const grid = document.getElementById('hotcold-grid');
-  const btns = document.querySelectorAll('#hotcold-btns .tab');
-  const sorteiosRaw = DATA.sorteios_raw;
-  const totalGeral = DATA.meta.total;
+  grid.innerHTML = '';
+  const indicesPeriodo = obterIndicesSorteiosDoPeriodo(periodoAtualId);
+  const sorteiosPeriodo = indicesPeriodo.map(i => DATA.sorteios_raw[i]);
+  const totalPeriodo = sorteiosPeriodo.length;
+  const janelaEfetiva = Math.min(janela, totalPeriodo);
+  const recentes = sorteiosPeriodo.slice(-janelaEfetiva);
+  const freqRec = {};
+  for (let d = 1; d <= 25; d++) freqRec[d] = 0;
+  recentes.forEach(s => s.forEach(d => freqRec[d]++));
 
-  function renderHotCold(janela) {
-    grid.innerHTML = '';
-    const recentes = sorteiosRaw.slice(-janela);
-    const freqRec = {};
-    for (let d = 1; d <= 25; d++) freqRec[d] = 0;
-    recentes.forEach(s => s.forEach(d => freqRec[d]++));
+  for (let d = 1; d <= 25; d++) {
+    const pctTotal = totalPeriodo ? (bundle.frequencia[d] || 0) / totalPeriodo * 100 : 0;
+    const pctRec = janelaEfetiva ? freqRec[d] / janelaEfetiva * 100 : 0;
+    const delta = pctTotal > 0 ? (pctRec - pctTotal) / pctTotal * 100 : 0;
+    let status = 'normal', emoji = '~';
+    if (delta >= 20) { status = 'quente'; emoji = '🔥'; }
+    else if (delta <= -20) { status = 'frio'; emoji = '❄️'; }
 
-    for (let d = 1; d <= 25; d++) {
-      const pctTotal = (DATA.frequencia[d] || 0) / totalGeral * 100;
-      const pctRec = freqRec[d] / janela * 100;
-      const delta = pctTotal > 0 ? (pctRec - pctTotal) / pctTotal * 100 : 0;
-      let status = 'normal', emoji = '~';
-      if (delta >= 20) { status = 'quente'; emoji = '🔥'; }
-      else if (delta <= -20) { status = 'frio'; emoji = '❄️'; }
-
-      const card = document.createElement('div');
-      card.className = 'hotcold-card ' + status;
-      card.innerHTML = `
-        <div class="num">${String(d).padStart(2,'0')}</div>
-        <div class="status">${emoji}</div>
-        <div class="pct">${pctRec.toFixed(0)}% (Δ${delta >= 0 ? '+' : ''}${delta.toFixed(0)}%)</div>`;
-      grid.appendChild(card);
-    }
+    const card = document.createElement('div');
+    card.className = 'hotcold-card ' + status;
+    card.innerHTML = `
+      <div class="num">${String(d).padStart(2,'0')}</div>
+      <div class="status">${emoji}</div>
+      <div class="pct">${pctRec.toFixed(0)}% (Δ${delta >= 0 ? '+' : ''}${delta.toFixed(0)}%)</div>`;
+    grid.appendChild(card);
   }
-
+}
+{
+  const btns = document.querySelectorAll('#hotcold-btns .tab');
   btns.forEach(btn => {
     btn.addEventListener('click', () => {
       btns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      renderHotCold(+btn.dataset.janela);
+      renderHotCold(resolverBundlePeriodo(periodoAtualId), +btn.dataset.janela);
     });
   });
-
-  renderHotCold(30);
 }
 
-// ── Dígitos finais ────────────────────────────────────────────────────────────
-{
-  const media = DATA.digitos_finais.media_por_sorteio;
-  const total = DATA.digitos_finais.total;
+// ── Dígitos finais — agora period-aware ──────────────────────────────────────
+function renderDigitosFinais(bundle) {
+  const media = bundle.digitos_finais.media_por_sorteio;
+  const total = bundle.digitos_finais.total;
   const labels = Object.keys(media).sort((a, b) => +a - +b);
-  new Chart(C('chartDigitos'), {
+  criarChart('chartDigitos', {
     type: 'bar',
     data: {
       labels: labels.map(d => 'dígito ' + d),
       datasets: [
         { label: 'Média por sorteio', data: labels.map(d => media[d]), backgroundColor: '#7c3aed', borderRadius: 4, yAxisID: 'y' },
-        { label: 'Total histórico', data: labels.map(d => total[d]), backgroundColor: '#06b6d4', borderRadius: 4, yAxisID: 'y1' }
+        { label: 'Total no período', data: labels.map(d => total[d]), backgroundColor: '#06b6d4', borderRadius: 4, yAxisID: 'y1' }
       ]
     },
     options: {
@@ -2304,11 +2420,16 @@ function renderChartEvolucao(bundle) {
   });
 }
 
-// ── Anti-correlação ───────────────────────────────────────────────────────────
-{
+// ── Anti-correlação — agora period-aware ─────────────────────────────────────
+function renderAntiCorr(bundle) {
   const list = document.getElementById('anticorr-list');
-  const items = DATA.anticorrelacao;
-  const total = DATA.meta.total;
+  list.innerHTML = '';
+  const items = bundle.anticorrelacao;
+  const total = bundle.meta.total;
+  if (!items.length) {
+    list.innerHTML = '<p style="color:var(--muted)">Sem dados suficientes neste período.</p>';
+    return;
+  }
   const maxC = Math.max(...items.map(x => x[1]));
   const table = document.createElement('table');
   table.innerHTML = `<thead><tr><th>#</th><th>Par</th><th>Aparições</th><th>% sorteios</th><th>Freq.</th></tr></thead>`;
@@ -3362,50 +3483,69 @@ def gerar_html(rows: list[dict], output: str, fonte_supabase: dict | None = None
 
 
 def imprimir_relatorio_auditoria_periodo():
-    """Relatório da auditoria do seletor de período (ver histórico de correções abaixo)."""
-    ja_reagia = [
-        "Heatmap de frequência", "Frequência por dezena (barras)", "Donut pares/ímpares",
-        "Atraso (já era relativo ao período, calc_atraso roda sobre o subconjunto)",
-        "Sequências consecutivas (abas 2-7)", "Top pares co-ocorrentes", "Tendência recente",
-        "Aba Blocos — ranking de frequência por número",
-        "KPIs: total, número mais/menos frequente, média pares, soma média, maior sequência",
+    """Relatório da auditoria linha a linha (todos os elementos vs. filtro de
+    período). Histórico das revisões anteriores nos comentários de código de
+    calcular_bundle_periodo() e aplicarPeriodo(); esta função sempre reflete o
+    estado ATUAL, não um changelog acumulado."""
+    ja_era_ok = [
+        "BLOCO 1 — Total de sorteios, número mais/menos frequente, média pares/sorteio, "
+        "soma média, maior sequência vista (renderKpisPeriodo)",
+        "BLOCO 2 — Financeiro: total pago, prêmio médio faixa 1, maior/menor prêmio "
+        "(concurso+data), sorteios acumulados e % (renderFinanceiro + calc_financeiro por período)",
+        "BLOCO 3 — Heatmap/grade interativa, frequência por dezena, donut pares/ímpares, "
+        "atraso (relativo ao último sorteio DO PERÍODO), faixas, soma, tendência recente, "
+        "evolução acumulada top-5",
+        "BLOCO 4 — Distribuição de tamanho de sequência e top sequências por tamanho (abas 2-7)",
+        "BLOCO 5 — Top 20 pares que mais saíram juntos (co-ocorrência)",
+        "BLOCO 6 — Aba Blocos: ranking por bloco A-E, tabela campeão/lanterna, combinações "
+        "de distribuição, co-ocorrência entre blocos (o card \"Blocos por período — histórico "
+        "completo\" é uma exceção INTENCIONAL: o próprio título já avisa que é sempre o "
+        "histórico inteiro, serve pra mostrar tendência ao longo do tempo)",
     ]
-    corrigido_agora = [
-        "Distribuição por faixa (baixo/médio/alto) — virou renderChartFaixas(bundle)",
-        "Distribuição de soma das dezenas — virou renderChartSoma(bundle)",
-        "Distribuição de tamanho de sequência (2-7) — virou renderChartSeqDist(bundle)",
-        "Evolução acumulada top-5 — virou renderChartEvolucao(bundle)",
-        "NOVO: Resumo financeiro por período (total pago, prêmio médio faixa 1, maior/menor prêmio, acumulados)",
-        "NOVO: banner indicando o período ativo no topo do dashboard",
-        "NOVO: aba Histórico agora filtra a árvore pelo período selecionado",
-        "Refatoração: seletor de período agora chama uma única função central aplicarPeriodo(periodoId)",
+    corrigido_nesta_auditoria = [
+        "BLOCO 5 — Anti-correlação (top 15 pares que MENOS saíram juntos): lia DATA.anticorrelacao "
+        "fixo; agora vem de bundle.anticorrelacao, recalculado por período (calc_anticorrelacao "
+        "sobre calc_coocorrencia_completa do subconjunto)",
+        "BLOCO 7 — Repetição do concurso anterior: lia DATA.repeticao_anterior fixo; agora "
+        "bundle.repeticao_anterior (calc_repeticao_anterior por período)",
+        "BLOCO 7 — Ciclo médio por dezena: lia DATA.ciclo_medio fixo; agora bundle.ciclo_medio",
+        "BLOCO 7 — Trios mais frequentes: lia DATA.trios fixo; agora bundle.trios (top 15 do período)",
+        "BLOCO 7 — Grade linha/coluna + mapa de calor do volante 5x5: lia DATA.grade/DATA.frequencia "
+        "fixos; agora bundle.grade/bundle.frequencia",
+        "BLOCO 7 — Dígitos finais (média por sorteio): lia DATA.digitos_finais fixo; agora "
+        "bundle.digitos_finais",
+        "BLOCO 7 — Números quentes e frios: comparava a janela de recência (15/30/50) contra o "
+        "histórico GERAL sempre; agora a janela e a linha de base usam só os sorteios do período "
+        "ativo (reaproveita obterIndicesSorteiosDoPeriodo, já usado pela grade interativa)",
     ]
-    bug_real_encontrado = [
-        "TDZ do JavaScript: 'historicoInicializado' era declarado com let na seção do Histórico "
-        "(mais abaixo no arquivo), mas aplicarPeriodo() já rodava antes disso no carregamento da "
-        "página — qualquer troca de período quebrava com ReferenceError. Corrigido movendo a "
-        "declaração para o topo do script.",
+    dados_financeiros_ja_existentes = [
+        "calc_financeiro() já existia e já era chamado por período desde uma revisão anterior "
+        "(calcular_bundle_periodo -> \"financeiro\": calc_financeiro(rows_p)) — confirmado com "
+        "teste de clique real: total pago, maior/menor prêmio e concurso mudam entre 'Todos' e "
+        "'2024' no navegador ao vivo. Nenhum campo financeiro precisou ser adicionado nesta rodada.",
     ]
-    fora_do_escopo_desta_auditoria = [
-        "Ciclo médio, trios, grade, quentes/frios, dígitos finais, anti-correlação, repetição do "
-        "concurso anterior, simulador de aposta, Meus jogos/Jogos sugeridos (custo-benefício) — "
-        "continuam com o histórico completo; não estavam na lista de elementos a auditar.",
+    limitacao_conhecida = [
+        "A grade interativa 5x5 (filtro por clique em dezenas) usa uma cópia em JavaScript dos "
+        "cálculos acima (montarBundleFiltradoPorNumeros) pra não precisar pré-computar todas as "
+        "combinações possíveis de dezenas no servidor — blocos e financeiro continuam mostrando o "
+        "período ativo (não recalculados pela combinação de números selecionada), decisão de "
+        "escopo já documentada no código.",
     ]
 
     print("\n" + "=" * 70)
-    print("AUDITORIA DO SELETOR DE PERÍODO")
+    print("AUDITORIA COMPLETA — TODOS OS ELEMENTOS vs. FILTRO DE PERÍODO")
     print("=" * 70)
-    print(f"\n✅ Já reagiam corretamente ({len(ja_reagia)}):")
-    for item in ja_reagia:
+    print(f"\n✅ Já respondiam corretamente ao período ({len(ja_era_ok)} blocos):")
+    for item in ja_era_ok:
         print(f"   - {item}")
-    print(f"\n🔧 Corrigidos/adicionados nesta revisão ({len(corrigido_agora)}):")
-    for item in corrigido_agora:
+    print(f"\n🔧 Corrigidos nesta auditoria ({len(corrigido_nesta_auditoria)}):")
+    for item in corrigido_nesta_auditoria:
         print(f"   - {item}")
-    print(f"\n🐛 Bug real encontrado durante os testes:")
-    for item in bug_real_encontrado:
+    print(f"\n💰 Dados financeiros:")
+    for item in dados_financeiros_ja_existentes:
         print(f"   - {item}")
-    print(f"\n⏭️  Fora do escopo desta auditoria (não listados no pedido):")
-    for item in fora_do_escopo_desta_auditoria:
+    print(f"\nℹ️  Limitação de escopo conhecida (documentada, não é bug):")
+    for item in limitacao_conhecida:
         print(f"   - {item}")
     print("=" * 70)
 
