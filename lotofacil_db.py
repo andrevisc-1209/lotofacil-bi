@@ -178,6 +178,10 @@ class _SQLiteBackend:
         finally:
             self.conn.row_factory = row_factory_original
 
+    def concursos_existentes(self) -> list[int]:
+        cur = self.conn.execute("SELECT concurso FROM sorteios")
+        return [row[0] for row in cur.fetchall()]
+
     def fechar(self):
         self.conn.close()
 
@@ -243,10 +247,49 @@ class _SupabaseBackend:
         return inseridos
 
     def carregar_todos(self) -> list[dict]:
-        status, corpo = self._request("GET", "sorteios?select=*&order=concurso.asc")
-        if status >= 400:
-            raise RuntimeError(f"Supabase respondeu {status} ao carregar sorteios: {corpo}")
-        return corpo or []
+        """Pagina em blocos de 1000 — o PostgREST limita select=* sem range a
+        1000 linhas por padrão (db-max-rows). A Lotofácil passou dos 1000
+        sorteios depois da carga total do histórico (--init-all), então isso
+        deixou de ser um limite seguro de ignorar (mesmo ajuste já feito em
+        megasena_db.py)."""
+        TAMANHO_PAGINA = 1000
+        todos = []
+        offset = 0
+        while True:
+            status, corpo = self._request(
+                "GET", "sorteios?select=*&order=concurso.asc",
+                headers={"Range-Unit": "items", "Range": f"{offset}-{offset + TAMANHO_PAGINA - 1}"},
+            )
+            if status >= 400:
+                raise RuntimeError(f"Supabase respondeu {status} ao carregar sorteios: {corpo}")
+            pagina = corpo or []
+            todos.extend(pagina)
+            if len(pagina) < TAMANHO_PAGINA:
+                break
+            offset += TAMANHO_PAGINA
+        return todos
+
+    def concursos_existentes(self) -> list[int]:
+        """Só os números de concurso (sem o resto das colunas) — usado por
+        --init-all pra saber quais concursos já existem e pular no download,
+        em vez de rebaixar tudo e confiar só no INSERT ignore-duplicates.
+        Também paginado, pela mesma razão de carregar_todos()."""
+        TAMANHO_PAGINA = 1000
+        todos = []
+        offset = 0
+        while True:
+            status, corpo = self._request(
+                "GET", "sorteios?select=concurso&order=concurso.asc",
+                headers={"Range-Unit": "items", "Range": f"{offset}-{offset + TAMANHO_PAGINA - 1}"},
+            )
+            if status >= 400:
+                raise RuntimeError(f"Supabase respondeu {status} ao listar concursos existentes: {corpo}")
+            pagina = corpo or []
+            todos.extend(row["concurso"] for row in pagina)
+            if len(pagina) < TAMANHO_PAGINA:
+                break
+            offset += TAMANHO_PAGINA
+        return todos
 
     def fechar(self):
         pass  # sem conexão persistente — cada chamada é uma requisição HTTP
@@ -277,6 +320,9 @@ class Database:
 
     def carregar_todos(self) -> list[dict]:
         return self._backend.carregar_todos()
+
+    def concursos_existentes(self) -> list[int]:
+        return self._backend.concursos_existentes()
 
     def total_sorteios(self) -> int:
         return len(self.carregar_todos())

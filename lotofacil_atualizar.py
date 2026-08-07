@@ -7,6 +7,7 @@ local (fallback/backup). Reaproveita a busca na API de lotofacil_coletar.py.
 Uso:
     python lotofacil_atualizar.py                  # atualiza Supabase + SQLite local
     python lotofacil_atualizar.py --init 500        # primeira carga: últimos 500 sorteios
+    python lotofacil_atualizar.py --init-all        # carga total: concurso 1 até o último disponível
     python lotofacil_atualizar.py --only-local      # atualiza só o SQLite (offline)
     python lotofacil_atualizar.py --source local    # descobre o delta pelo SQLite, não pelo Supabase
 
@@ -33,22 +34,44 @@ def log(msg: str):
 
 
 def baixar_delta(numeros: list[int]) -> list[dict]:
-    """Baixa os concursos da lista em paralelo e devolve as linhas já no
-    formato do banco (via montar_linha), prontas para inserir_sorteios()."""
+    """Baixa os concursos da lista em paralelo (com retry por concurso, feito
+    dentro de fetch_concurso) e devolve as linhas já no formato do banco. Os
+    que ainda falharem depois disso passam por uma segunda rodada serial —
+    útil pra cargas grandes (--init-all): na Mega-Sena, um rate-limit passageiro
+    da API da Caixa derrubou ~900 de 3040 requisições paralelas de uma vez, e
+    essa segunda rodada mais devagar recuperou quase todas."""
     if not numeros:
         return []
 
     registros = []
+    falhados = []
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = {executor.submit(fetch_concurso, n): n for n in numeros}
         concluidos = 0
         for future in as_completed(futures):
+            n = futures[future]
             data = future.result()
             if data:
                 registros.append(db_module.montar_linha(data))
+            else:
+                falhados.append(n)
             concluidos += 1
             if concluidos % 50 == 0 or concluidos == len(numeros):
-                log(f"  {concluidos}/{len(numeros)} concursos baixados")
+                log(f"  {concluidos}/{len(numeros)} concursos baixados ({len(falhados)} falha(s) até agora)")
+
+    if falhados:
+        log(f"Re-tentando {len(falhados)} concurso(s) que falharam na primeira rodada...")
+        ainda_falhando = []
+        for n in falhados:
+            data = fetch_concurso(n)
+            if data:
+                registros.append(db_module.montar_linha(data))
+            else:
+                ainda_falhando.append(n)
+        if ainda_falhando:
+            log(f"[aviso] {len(ainda_falhando)} concurso(s) não baixaram mesmo após re-tentativa: {ainda_falhando[:20]}"
+                + (" ..." if len(ainda_falhando) > 20 else ""))
+
     return registros
 
 
@@ -70,7 +93,7 @@ def conectar_supabase(pasta: str):
         return None
 
 
-def atualizar(init_qtd: int | None, only_local: bool, source: str, db_path: str, pasta: str):
+def atualizar(init_qtd: int | None, init_all: bool, only_local: bool, source: str, db_path: str, pasta: str):
     db_local = db_module.Database.sqlite(db_path)
 
     db_supabase = None
@@ -87,7 +110,14 @@ def atualizar(init_qtd: int | None, only_local: bool, source: str, db_path: str,
         sys.exit(1)
     ultimo_api = ultimo_api_data["numero"]
 
-    if ultimo_local == 0:
+    if init_all:
+        log("Carga total do histórico solicitada (--init-all).")
+        existentes = set(origem_leitura.concursos_existentes())
+        numeros = [n for n in range(1, ultimo_api + 1) if n not in existentes]
+        log(f"Último da API: {ultimo_api} | Já no banco: {len(existentes)} | Faltando: {len(numeros)}")
+        if not numeros:
+            log("Banco já está completo!")
+    elif ultimo_local == 0:
         if init_qtd is None:
             if sys.stdin.isatty():
                 resposta = input("Banco vazio. Quantos sorteios históricos deseja importar? [500]: ").strip()
@@ -134,9 +164,11 @@ if __name__ == "__main__":
     )
     parser.add_argument("--db", default="lotofacil.db", help="Caminho do banco SQLite local (padrão: lotofacil.db)")
     parser.add_argument("--init", type=int, default=None, help="Primeira carga: quantidade de sorteios históricos a importar")
+    parser.add_argument("--init-all", action="store_true",
+                         help="Carga total do histórico: concurso 1 até o último disponível (pula os que já existem no banco)")
     parser.add_argument("--only-local", action="store_true", help="Não tenta o Supabase — atualiza só o SQLite local")
     parser.add_argument("--source", choices=["supabase", "local"], default="supabase",
                          help="De onde ler o 'último concurso' para descobrir o delta (padrão: supabase)")
     args = parser.parse_args()
 
-    atualizar(args.init, args.only_local, args.source, args.db, ".")
+    atualizar(args.init, args.init_all, args.only_local, args.source, args.db, ".")
