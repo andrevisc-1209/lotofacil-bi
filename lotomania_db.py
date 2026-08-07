@@ -52,9 +52,18 @@ CREATE TABLE IF NOT EXISTS lotomania_sorteios (
 );
 """
 
-COLUNAS = ["concurso", "data", "data_br", "acumulado", "valor_premio", "ganhadores"] + [
-    f"d{i:02d}" for i in range(1, 21)
-]
+# faixas 2-6 (19/18/17/16/15 acertos) — adicionadas depois do schema
+# original, mesmo motivo da faixa 7 (surpresa): todos os prêmios da
+# Lotomania são variáveis (rateio por sorteio), nunca fixos.
+NOME_FAIXA = {2: "dezenove", 3: "dezoito", 4: "dezessete", 5: "dezesseis", 6: "quinze"}
+COLUNAS_FAIXAS_SECUNDARIAS = [c for nome in NOME_FAIXA.values() for c in (f"valor_{nome}", f"ganhadores_{nome}")]
+
+COLUNAS = (
+    ["concurso", "data", "data_br", "acumulado", "valor_premio", "ganhadores"]
+    + [f"d{i:02d}" for i in range(1, 21)]
+    + ["valor_surpresa", "ganhadores_surpresa"]
+    + COLUNAS_FAIXAS_SECUNDARIAS
+)
 
 
 # ─── conversão API da Caixa → linha do banco (comum aos dois backends) ───────
@@ -65,10 +74,12 @@ def data_br_para_iso(data_br: str) -> str:
 def montar_linha(data_api: dict) -> dict:
     """Converte o JSON retornado pela API da Caixa (endpoint /lotomania/{n})
     para o formato de linha do banco. Faixa 1 = "vinte" (20 acertos, prêmio
-    maior). A Lotomania tem uma 7ª faixa única no Brasil, "surpresa" (0
-    acertos) — confirmado via API real que ela é sempre listaRateioPremio
-    com faixa=7 e descricaoFaixa="0 acertos", então usamos o número da faixa
-    (estável) em vez de casar a descrição por texto."""
+    maior). Faixas 2-6 = dezenove/dezoito/dezessete/dezesseis/quinze. A
+    Lotomania tem uma 7ª faixa única no Brasil, "surpresa" (0 acertos) —
+    confirmado via API real que ela é sempre listaRateioPremio com faixa=7 e
+    descricaoFaixa="0 acertos", então usamos o número da faixa (estável) em
+    vez de casar a descrição por texto. TODOS os prêmios da Lotomania são
+    variáveis (rateio por sorteio) — nenhuma faixa usa valor fixo."""
     dezenas = sorted(int(d) for d in (data_api.get("listaDezenas") or []))
     data_br = data_api.get("dataApuracao")
 
@@ -76,13 +87,19 @@ def montar_linha(data_api: dict) -> dict:
     ganhadores = None
     valor_surpresa = None
     ganhadores_surpresa = None
+    secundarias = {}
     for faixa in data_api.get("listaRateioPremio") or []:
-        if faixa.get("faixa") == 1:
+        n = faixa.get("faixa")
+        if n == 1:
             valor_premio = faixa.get("valorPremio")
             ganhadores = faixa.get("numeroDeGanhadores")
-        elif faixa.get("faixa") == 7:
+        elif n == 7:
             valor_surpresa = faixa.get("valorPremio")
             ganhadores_surpresa = faixa.get("numeroDeGanhadores")
+        elif n in NOME_FAIXA:
+            nome = NOME_FAIXA[n]
+            secundarias[f"valor_{nome}"] = faixa.get("valorPremio")
+            secundarias[f"ganhadores_{nome}"] = faixa.get("numeroDeGanhadores")
 
     linha = {
         "concurso": data_api.get("numero"),
@@ -93,6 +110,7 @@ def montar_linha(data_api: dict) -> dict:
         "ganhadores": ganhadores,
         "valor_surpresa": valor_surpresa,
         "ganhadores_surpresa": ganhadores_surpresa,
+        **{c: secundarias.get(c) for c in COLUNAS_FAIXAS_SECUNDARIAS},
     }
     for i, d in enumerate(dezenas, start=1):
         linha[f"d{i:02d}"] = d
@@ -105,17 +123,18 @@ class _SQLiteBackend:
     def __init__(self, db_path: str):
         self.conn = sqlite3.connect(db_path)
         self.conn.execute(SCHEMA_SQLITE)
-        self._garantir_colunas_surpresa()
+        self._garantir_colunas_faixas_secundarias()
         self.conn.commit()
 
-    def _garantir_colunas_surpresa(self):
-        """valor_surpresa/ganhadores_surpresa foram adicionadas depois do
-        schema original — ALTER TABLE idempotente pra bancos já existentes."""
+    def _garantir_colunas_faixas_secundarias(self):
+        """valor_surpresa/ganhadores_surpresa e as faixas 2-6 (dezenove...
+        quinze) foram adicionadas depois do schema original — ALTER TABLE
+        idempotente pra bancos já existentes."""
         colunas_atuais = {row[1] for row in self.conn.execute(f"PRAGMA table_info({TABELA})")}
-        if "valor_surpresa" not in colunas_atuais:
-            self.conn.execute(f"ALTER TABLE {TABELA} ADD COLUMN valor_surpresa REAL")
-        if "ganhadores_surpresa" not in colunas_atuais:
-            self.conn.execute(f"ALTER TABLE {TABELA} ADD COLUMN ganhadores_surpresa INTEGER")
+        for coluna in ["valor_surpresa", "ganhadores_surpresa"] + COLUNAS_FAIXAS_SECUNDARIAS:
+            if coluna not in colunas_atuais:
+                tipo = "INTEGER" if coluna.startswith("ganhadores_") else "REAL"
+                self.conn.execute(f"ALTER TABLE {TABELA} ADD COLUMN {coluna} {tipo}")
 
     def ultimo_concurso(self) -> int:
         row = self.conn.execute(f"SELECT MAX(concurso) FROM {TABELA}").fetchone()
@@ -126,20 +145,24 @@ class _SQLiteBackend:
         return [row[0] for row in cur.fetchall()]
 
     def inserir_sorteios(self, registros: list[dict]) -> int:
-        colunas = COLUNAS + ["valor_surpresa", "ganhadores_surpresa"]
-        placeholders = ", ".join("?" for _ in colunas)
-        colunas_sql = ", ".join(colunas)
-        inseridos = 0
+        """Upsert (INSERT ... ON CONFLICT DO UPDATE): reprocessar um concurso
+        já existente atualiza a linha em vez de ser ignorado — necessário pro
+        backfill das faixas secundárias sobre o histórico já carregado."""
+        placeholders = ", ".join("?" for _ in COLUNAS)
+        colunas_sql = ", ".join(COLUNAS)
+        update_sql = ", ".join(f"{c}=excluded.{c}" for c in COLUNAS if c != "concurso")
+        afetados = 0
         for dados in registros:
-            valores = [dados.get(c) for c in colunas]
+            valores = [dados.get(c) for c in COLUNAS]
             cursor = self.conn.execute(
-                f"INSERT OR IGNORE INTO {TABELA} ({colunas_sql}) VALUES ({placeholders})",
+                f"INSERT INTO {TABELA} ({colunas_sql}) VALUES ({placeholders}) "
+                f"ON CONFLICT(concurso) DO UPDATE SET {update_sql}",
                 valores,
             )
             if cursor.rowcount > 0:
-                inseridos += 1
+                afetados += 1
         self.conn.commit()
-        return inseridos
+        return afetados
 
     def carregar_todos(self) -> list[dict]:
         row_factory_original = self.conn.row_factory
@@ -217,18 +240,20 @@ class _SupabaseBackend:
 
     @staticmethod
     def _normalizar(dados: dict) -> dict:
-        colunas = COLUNAS + ["valor_surpresa", "ganhadores_surpresa"]
-        linha = {c: dados.get(c) for c in colunas}
+        linha = {c: dados.get(c) for c in COLUNAS}
         linha["acumulado"] = bool(linha.get("acumulado"))
         return linha
 
     def inserir_sorteios(self, registros: list[dict]) -> int:
+        """Upsert (resolution=merge-duplicates): reprocessar um concurso já
+        existente atualiza a linha em vez de ser ignorado — necessário pro
+        backfill das faixas secundárias sobre o histórico já carregado."""
         inseridos = 0
         for i in range(0, len(registros), self.LOTE):
             lote = [self._normalizar(r) for r in registros[i:i + self.LOTE]]
             status, corpo = self._request(
                 "POST", f"{TABELA}?on_conflict=concurso",
-                headers={"Prefer": "resolution=ignore-duplicates,return=representation"},
+                headers={"Prefer": "resolution=merge-duplicates,return=representation"},
                 body=lote,
             )
             if status >= 400:

@@ -3,8 +3,9 @@ lotomania_bi.py
 ----------------
 Gera o dashboard HTML interativo da Lotomania — mesmo padrão visual e
 arquitetural de megasena_bi.py/lotofacil_bi.py (Python pré-computa tudo por
-período, JS só renderiza), SEM simulador de aposta nem "Meus jogos" (fora do
-escopo deste dashboard — diferente da Mega-Sena e da Lotofácil).
+período, JS só renderiza), incluindo "Meus Jogos" (validador financeiro) e
+Simulador de aposta — com o esquema de pontuação INVERTIDO da Lotomania (ver
+calc_jogos_lotomania) e a faixa 7 "surpresa" (0 acertos) como vitória real.
 
 Universo real: 00-99 (100 números, zero incluído) — confirmado via API real
 da Caixa (o concurso 1 já tinha "00" em listaDezenas). 20 dezenas sorteadas
@@ -31,6 +32,17 @@ from collections import Counter, defaultdict
 from itertools import combinations
 from math import comb, exp
 from pathlib import Path
+
+# placeholder — números aleatórios, o usuário substitui depois (não são
+# "sugeridos" nem seguem nenhum padrão estatístico, ao contrário da Lotofácil)
+JOGOS_LOTOMANIA = {
+    "Jogo 1": [0, 2, 3, 4, 5, 6, 11, 13, 14, 16, 17, 19, 20, 22, 24, 25, 27, 28, 29, 31, 35, 38, 43, 46, 51, 53, 54, 57, 58, 62, 64, 67, 68, 69, 71, 75, 77, 79, 81, 82, 84, 86, 88, 89, 90, 93, 94, 95, 97, 99],
+    "Jogo 2": [2, 3, 5, 8, 9, 10, 12, 14, 15, 17, 20, 21, 24, 25, 26, 28, 29, 31, 34, 35, 37, 43, 45, 46, 47, 48, 49, 51, 52, 53, 58, 59, 61, 66, 67, 68, 70, 72, 73, 76, 79, 80, 84, 85, 91, 93, 94, 96, 97, 99],
+    "Jogo 3": [0, 6, 7, 8, 11, 14, 16, 17, 18, 19, 20, 27, 28, 31, 33, 34, 35, 40, 43, 46, 48, 49, 50, 51, 54, 55, 57, 58, 59, 63, 64, 65, 68, 71, 72, 74, 75, 77, 79, 80, 81, 82, 83, 86, 87, 90, 91, 92, 98, 99],
+    "Jogo 4": [0, 2, 4, 7, 8, 10, 13, 14, 16, 19, 20, 22, 25, 30, 33, 34, 35, 37, 38, 39, 41, 42, 43, 46, 47, 48, 49, 52, 55, 57, 58, 62, 64, 65, 66, 67, 68, 69, 73, 77, 80, 81, 82, 83, 88, 90, 91, 92, 94, 97],
+    "Jogo 5": [0, 2, 4, 7, 8, 9, 13, 15, 25, 27, 28, 29, 30, 31, 34, 35, 36, 39, 42, 43, 46, 47, 50, 51, 53, 54, 55, 56, 57, 64, 65, 66, 67, 69, 70, 72, 75, 77, 80, 81, 82, 83, 85, 86, 88, 91, 93, 94, 96, 99],
+}
+CUSTO_LOTOMANIA = 3.00
 
 
 # ─── carrega dados do banco (SQLite ou Supabase, via lotomania_db.Database) ───
@@ -337,7 +349,11 @@ def _meta_sorteio(row: dict) -> dict:
     anos: além de concurso/data, inclui valor_premio/ganhadores/acumulado
     (faixa 1) e valor_surpresa/ganhadores_surpresa (faixa 7) — sem isso o JS
     não consegue recalcular nem o card financeiro nem o card Faixa Surpresa
-    sobre um período mesclado (ver calcFinanceiroJS/calcFaixaSurpresaJS)."""
+    sobre um período mesclado (ver calcFinanceiroJS/calcFaixaSurpresaJS).
+    valor_dezenove/dezoito/dezessete/dezesseis/quinze: valores reais das
+    faixas 2-6 (19/18/17/16/15 acertos) — sem isso o JS não consegue
+    recalcular "Meus Jogos"/o simulador sobre um período mesclado (ver
+    calcJogosLotomaniaJS)."""
     return {
         "concurso": _to_int(row["concurso"]),
         "data": row["data"],
@@ -346,6 +362,11 @@ def _meta_sorteio(row: dict) -> dict:
         "acumulado": _acumulado_bool(row.get("acumulado")),
         "valor_surpresa": _to_float(row.get("valor_surpresa")),
         "ganhadores_surpresa": _to_int(row.get("ganhadores_surpresa")) or 0,
+        "valor_dezenove": _to_float(row.get("valor_dezenove")),
+        "valor_dezoito": _to_float(row.get("valor_dezoito")),
+        "valor_dezessete": _to_float(row.get("valor_dezessete")),
+        "valor_dezesseis": _to_float(row.get("valor_dezesseis")),
+        "valor_quinze": _to_float(row.get("valor_quinze")),
     }
 
 def calc_financeiro(rows_p: list[dict]) -> dict:
@@ -423,6 +444,97 @@ def calc_faixa_surpresa(rows_p: list[dict]) -> dict:
     }
 
 
+# ─── "Meus Jogos" — validador financeiro (esquema INVERTIDO de pontuação) ────
+# Lotomania: o jogador aposta 50 dezenas (de um universo de 100, 00-99); são
+# sorteadas 20; acertos = quantas das 20 SORTEADAS caem dentro das 50
+# apostadas — o oposto de Lotofácil/Mega-Sena, onde o jogador aposta poucas
+# dezenas e o acerto é quantas delas saem no sorteio. 7 faixas premiam: 15 a
+# 20 acertos E, exclusividade desta loteria, 0 acertos ("surpresa"). Todas as
+# 7 usam o valor real por sorteio (sem fallback fixo — confirmado via API
+# real que nenhuma faixa da Lotomania tem valor fixo ao longo da história).
+
+FAIXA_LOTOMANIA = {
+    20: {"nome": "vinte", "campo_valor": "valor_premio", "campo_ganhadores": "ganhadores"},
+    19: {"nome": "dezenove", "campo_valor": "valor_dezenove", "campo_ganhadores": "ganhadores_dezenove"},
+    18: {"nome": "dezoito", "campo_valor": "valor_dezoito", "campo_ganhadores": "ganhadores_dezoito"},
+    17: {"nome": "dezessete", "campo_valor": "valor_dezessete", "campo_ganhadores": "ganhadores_dezessete"},
+    16: {"nome": "dezesseis", "campo_valor": "valor_dezesseis", "campo_ganhadores": "ganhadores_dezesseis"},
+    15: {"nome": "quinze", "campo_valor": "valor_quinze", "campo_ganhadores": "ganhadores_quinze"},
+    0: {"nome": "surpresa", "campo_valor": "valor_surpresa", "campo_ganhadores": "ganhadores_surpresa"},
+}
+# prioridade pra decidir o "melhor resultado" de um jogo: 0 acertos é uma
+# vitória genuína (faixa surpresa), mas como valor de prêmio ela costuma ser
+# a menor das 7 — por isso entra em último na prioridade, não por "acertos"
+# numérico puro (que faria 0 nunca vencer nenhuma comparação).
+PRIORIDADE_FAIXA_LOTOMANIA = {20: 7, 19: 6, 18: 5, 17: 4, 16: 3, 15: 2, 0: 1}
+
+def calc_jogos_lotomania(jogos_dict, rows_p, sorteios_p):
+    """Validador financeiro completo de um dicionário {nome: [50 dezenas]}
+    sobre um período: contagem por faixa (0, 15-20), histórico de sorteios em
+    que pontuou (lista expandível + mini gráfico), evolução do saldo
+    acumulado sorteio a sorteio (gráfico de linha) e o resultado financeiro
+    final (gasto/ganho/saldo/ROI). Espelha calc_jogos_financeiro da Lotofácil/
+    Mega-Sena, mas com acertos = interseção do jogo com as 20 dezenas
+    sorteadas (esquema invertido, ver comentário acima)."""
+    n = len(sorteios_p)
+    resultado = []
+    for nome, numeros in jogos_dict.items():
+        conjunto = set(numeros)
+        contagem = {20: 0, 19: 0, 18: 0, 17: 0, 16: 0, 15: 0, 0: 0}
+        historico = []
+        ganho = 0.0
+        saldo_evolucao = []
+        acumulado = 0.0
+        melhor = {"acertos": None, "concurso": None, "data": None}
+        melhor_prioridade = 0
+
+        for row, s in zip(rows_p, sorteios_p):
+            acertos = len(conjunto & set(s))
+            premio = 0.0
+            if acertos in FAIXA_LOTOMANIA:
+                faixa = FAIXA_LOTOMANIA[acertos]
+                contagem[acertos] += 1
+                premio = _to_float(row.get(faixa["campo_valor"])) or 0.0
+                historico.append({
+                    "concurso": _to_int(row["concurso"]),
+                    "data": row["data"],
+                    "acertos": acertos,
+                    "faixa": faixa["nome"],
+                    "premio": round(premio, 2),
+                })
+                ganho += premio
+                prioridade = PRIORIDADE_FAIXA_LOTOMANIA[acertos]
+                if prioridade > melhor_prioridade:
+                    melhor_prioridade = prioridade
+                    melhor = {"acertos": acertos, "concurso": _to_int(row["concurso"]), "data": row["data"]}
+            acumulado += premio - CUSTO_LOTOMANIA
+            saldo_evolucao.append(round(acumulado, 2))
+
+        gasto = round(CUSTO_LOTOMANIA * n, 2)
+        ganho = round(ganho, 2)
+        saldo = round(ganho - gasto, 2)
+        roi = round(saldo / gasto * 100, 1) if gasto else 0.0
+        total_premiado = sum(contagem.values())
+
+        resultado.append({
+            "nome": nome,
+            "numeros": sorted(numeros),
+            "contagem": contagem,
+            "total_premiado": total_premiado,
+            "pct_premiado": round(total_premiado / n * 100, 1) if n else 0.0,
+            "gasto": gasto,
+            "ganho": ganho,
+            "saldo": saldo,
+            "roi": roi,
+            "melhor": melhor,
+            "historico": historico,
+            "saldo_evolucao": saldo_evolucao,
+        })
+
+    resultado.sort(key=lambda x: x["saldo"], reverse=True)
+    return resultado
+
+
 # ─── seletor de período temporal (ano / semestre / trimestre / bimestre / mês) ─
 # mesma lógica de bucketing por data da Mega-Sena/Lotofácil — não depende do
 # tipo de loteria
@@ -468,6 +580,7 @@ def calcular_bundle_periodo(rows_p, sorteios_p):
         "blocos": calc_blocos_bundle(rows_p, sorteios_p),
         "financeiro": calc_financeiro(rows_p),
         "faixa_surpresa": calc_faixa_surpresa(rows_p),
+        "jogos": calc_jogos_lotomania(JOGOS_LOTOMANIA, rows_p, sorteios_p) if JOGOS_LOTOMANIA else None,
         "sorteios_raw": sorteios_p,
         "sorteios_meta": [_meta_sorteio(r) for r in rows_p],
     }
@@ -866,6 +979,60 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .fin-item .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
   .fin-item .value { font-size: 18px; font-weight: 700; color: var(--accent2); }
   .fin-item .sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  /* Meus Jogos — tabela comparativa */
+  .jogos-resumo-titulo { font-size: 14px; font-weight: 700; color: var(--accent2); margin-bottom: 10px; }
+  .jogos-tabela th[data-col] { cursor: pointer; user-select: none; white-space: nowrap; }
+  .jogos-tabela th[data-col]:hover { color: var(--text); }
+  .jogos-tabela th .sort-arrow { display: inline-block; width: 10px; opacity: .6; }
+  .jogos-row { cursor: pointer; }
+  .jogos-row.saldo-pos td { background: rgba(16,185,129,.06); }
+  .jogos-row.saldo-neg td { background: rgba(239,68,68,.06); }
+  .jogos-row:hover td { filter: brightness(1.15); }
+  .jogos-row .jogos-dezenas { font-family: monospace; font-size: 11px; color: var(--muted); }
+  .jogos-detail-row td { padding: 0; border-bottom: 1px solid #1e2130; }
+  .jogos-detail-inner { max-height: 0; overflow: hidden; transition: max-height .25s ease; padding: 0 16px; }
+  .jogos-detail-inner.aberto { max-height: 900px; padding: 16px; }
+  .jogos-detail-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; margin-bottom: 16px; }
+  @media (max-width: 900px) { .jogos-detail-grid { grid-template-columns: 1fr; } }
+  .jogos-detail-grid canvas { max-height: 200px; }
+  .jogos-detail-titulo { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 10px; }
+  .jogos-hist-surpresa td { color: var(--accent2); font-weight: 700; }
+  .jogos-badge-surpresa { margin-left: 4px; }
+  /* Simulador de apostas */
+  .sim-box { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .sim-box input { flex: 1; min-width: 260px; background: #0f1117; border: 1px solid var(--border); border-radius: 6px; padding: 9px 12px; color: var(--text); font-size: 13px; }
+  .sim-box input:focus { outline: none; border-color: var(--accent); }
+  .sim-box button { background: var(--accent); border: none; border-radius: 6px; padding: 9px 20px; color: #fff; font-weight: 600; cursor: pointer; font-size: 13px; }
+  .sim-box button:hover { background: #b45309; }
+  .sim-error { color: var(--red); font-size: 12px; margin: -6px 0 12px; }
+  .sim-qtd-selector { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; font-size: 13px; }
+  .sim-qtd-selector label { display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--text); }
+  .sim-qtd-label { font-weight: 700; color: var(--muted); text-transform: uppercase; font-size: 11px; letter-spacing: .5px; }
+  .sim-jogos-lista { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .sim-jogo-row { display: flex; align-items: center; gap: 8px; }
+  .sim-jogo-label { width: 62px; flex-shrink: 0; font-size: 12px; color: var(--muted); font-weight: 600; }
+  .sim-jogo-input { flex: 1; min-width: 0; background: #0f1117; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: var(--text); font-size: 13px; }
+  .sim-jogo-input:focus { outline: none; border-color: var(--accent); }
+  .sim-jogo-badge { min-width: 96px; text-align: center; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 6px; flex-shrink: 0; border: 1px solid var(--border); color: var(--muted); }
+  .sim-jogo-badge.ok { background: rgba(16,185,129,.15); color: var(--green); border-color: rgba(16,185,129,.4); }
+  .sim-jogo-badge.parcial { background: rgba(245,158,11,.15); color: #fbbf24; border-color: rgba(245,158,11,.4); }
+  .sim-jogo-badge.erro { background: rgba(239,68,68,.15); color: var(--red); border-color: rgba(239,68,68,.4); }
+  .sim-jogo-remove { background: transparent; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; cursor: pointer; color: var(--muted); font-size: 13px; flex-shrink: 0; }
+  .sim-jogo-remove:hover { border-color: var(--red); color: var(--red); }
+  .sim-acoes { display: flex; gap: 10px; margin-bottom: 14px; }
+  .sim-acoes button { background: var(--accent); border: none; border-radius: 6px; padding: 9px 18px; color: #fff; font-weight: 600; cursor: pointer; font-size: 13px; }
+  .sim-acoes button:hover { background: #b45309; }
+  .sim-acoes #sim-btn-add { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .sim-acoes #sim-btn-add:hover { border-color: var(--accent); color: var(--accent2); }
+  .sim-aviso { color: #fbbf24; font-size: 12px; margin-bottom: 10px; }
+  .sim-compare-row.destaque-ouro td { background: rgba(245,158,11,.12); }
+  .sim-trofeu { margin-left: 4px; }
+  .sim-detalhe-toggle { cursor: pointer; color: var(--accent2); font-size: 11px; background: none; border: none; padding: 0; text-decoration: underline; }
+  .sim-detalhe-painel { display: none; padding: 10px 0 4px; }
+  .sim-detalhe-painel.aberto { display: block; }
+  .sim-detalhe-item { display: inline-block; margin: 2px 6px 2px 0; padding: 3px 8px; border-radius: 6px; background: #1e2130; font-size: 11px; color: var(--text); }
+  .sim-copiar-btn { margin-top: 12px; background: transparent; border: 1px solid var(--border); border-radius: 6px; padding: 8px 16px; color: var(--text); cursor: pointer; font-size: 12px; }
+  .sim-copiar-btn:hover { border-color: var(--accent); color: var(--accent2); }
   .page-tabs { display: flex; gap: 6px; padding: 16px 24px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
   .page-tab { padding: 10px 20px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; flex-shrink: 0; transition: background .15s, color .15s, border-color .15s; }
   .page-tab:hover { color: var(--text); background: rgba(217,119,6,.1); border-color: var(--border); }
@@ -964,6 +1131,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <button class="page-tab active" id="page-tab-geral">Análise Geral</button>
   <button class="page-tab" id="page-tab-blocos">Blocos</button>
   <button class="page-tab" id="page-tab-historico">Histórico</button>
+  <button class="page-tab" id="page-tab-jogos">Meus Jogos</button>
 </div>
 
 <div id="page-geral" class="page-content">
@@ -1194,6 +1362,55 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 </div>
 
 </div><!-- /page-historico -->
+
+<div id="page-jogos" class="page-content" style="display:none;">
+
+<!-- Meus jogos — validador financeiro (esquema invertido: acertos = quantas
+     das 20 sorteadas caem dentro das 50 apostadas; 0 acertos também premia) -->
+<div class="grid" style="grid-template-columns: 1fr;">
+  <div class="card" id="jogos-header-card">
+    <h2>🎯 Meus Jogos — Lotomania</h2>
+    <div id="jogos-resumo"></div>
+  </div>
+</div>
+
+<div class="grid" style="grid-template-columns: 1fr;">
+  <div class="card" id="jogos-card">
+    <h2>📊 Tabela comparativa</h2>
+    <p style="color:var(--muted); font-size:12px; margin-bottom:12px;">Clique numa linha para ver o histórico completo de sorteios em que o jogo pontuou. Clique nos títulos das colunas pra ordenar.</p>
+    <div id="jogos-tabela-wrap" style="overflow-x:auto;"></div>
+  </div>
+</div>
+
+<!-- Simulador de apostas -->
+<div class="grid" style="grid-template-columns: 1fr;">
+  <div class="card">
+    <h2>🎰 Simulador de apostas</h2>
+    <p style="color:var(--muted); font-size:12px; margin-bottom:14px;">
+      Informe exatamente 50 números entre 00 e 99. Aceita separadores flexíveis — espaço, vírgula, ponto, traço, ponto e vírgula, ou qualquer mistura (ex: "00, 02 05-06;07 09.11 ...").
+    </p>
+
+    <div class="sim-qtd-selector" id="sim-qtd-selector">
+      <span class="sim-qtd-label">Simular</span>
+      <label><input type="radio" name="sim-qtd" value="1" checked> 1 jogo</label>
+      <label><input type="radio" name="sim-qtd" value="5"> 5 jogos</label>
+      <label><input type="radio" name="sim-qtd" value="10"> 10 jogos</label>
+      <label><input type="radio" name="sim-qtd" value="20"> 20 jogos</label>
+    </div>
+
+    <div id="sim-jogos-lista" class="sim-jogos-lista"></div>
+
+    <div class="sim-acoes">
+      <button id="sim-btn-add" type="button">➕ Adicionar jogo</button>
+      <button id="sim-btn" type="button">Verificar</button>
+    </div>
+
+    <div class="sim-error" id="sim-error" style="display:none;"></div>
+    <div id="sim-result"></div>
+  </div>
+</div>
+
+</div><!-- /page-jogos -->
 
 <footer>Dados: API oficial Caixa Econômica Federal • {gerado_em}</footer>
 
@@ -1809,6 +2026,242 @@ function renderBannerPeriodo(periodoId, bundle) {
   banner.style.display = 'block';
 }
 
+// ── Meus Jogos — validador financeiro (aba dedicada). O cálculo financeiro
+// (ganho/gasto/saldo/ROI, histórico de sorteios em que pontuou, evolução do
+// saldo) já vem pronto em bundle.jogos (Python) ou calcJogosLotomaniaJS (JS,
+// mesclagem multi-ano) — aqui só ordena e desenha. ───────────────────────────
+
+const ESTADO_ORDENACAO_JOGOS_LOTOMANIA = { coluna: 'saldo', direcao: -1 };
+const COLUNAS_JOGOS_LOTOMANIA = [
+  { key: 'idx', label: '#', ordenavel: false },
+  { key: 'nome', label: 'Jogo', ordenavel: true },
+  { key: 'p20', label: '20pts', ordenavel: true },
+  { key: 'p19', label: '19pts', ordenavel: true },
+  { key: 'p18', label: '18pts', ordenavel: true },
+  { key: 'p17', label: '17pts', ordenavel: true },
+  { key: 'p16', label: '16pts', ordenavel: true },
+  { key: 'p15', label: '15pts', ordenavel: true },
+  { key: 'surpresa', label: 'Surpresa', ordenavel: true },
+  { key: 'total_premiado', label: 'Total prem.', ordenavel: true },
+  { key: 'gasto', label: 'Gasto', ordenavel: true },
+  { key: 'ganho', label: 'Ganho', ordenavel: true },
+  { key: 'saldo', label: 'Saldo', ordenavel: true },
+  { key: 'roi', label: 'ROI', ordenavel: true },
+  { key: 'melhor', label: 'Melhor faixa', ordenavel: false },
+];
+
+function valorOrdenacaoJogoLotomania(jogo, coluna) {
+  switch (coluna) {
+    case 'nome': return jogo.nome;
+    case 'p20': return jogo.contagem[20];
+    case 'p19': return jogo.contagem[19];
+    case 'p18': return jogo.contagem[18];
+    case 'p17': return jogo.contagem[17];
+    case 'p16': return jogo.contagem[16];
+    case 'p15': return jogo.contagem[15];
+    case 'surpresa': return jogo.contagem[0];
+    default: return jogo[coluna];
+  }
+}
+
+function labelPeriodoParaJogos(periodoId) {
+  if (periodoId === '__todos__') return 'Todos os sorteios';
+  if (periodoId.startsWith('MULTI:')) return periodoId.slice(6).split(',').join(' + ');
+  const info = (DATA.periodos_disponiveis || []).find(p => p.id === periodoId);
+  return info ? info.label : periodoId;
+}
+
+function renderJogosResumoLotomania(jogos, nSorteios, periodoLabel) {
+  const el = document.getElementById('jogos-resumo');
+  const nJogos = jogos.length;
+  const custoPorSorteio = +(CUSTO_LOTOMANIA_JS * nJogos).toFixed(2);
+  const gastoTotal = jogos.reduce((a, j) => a + j.gasto, 0);
+  const ganhoTotal = jogos.reduce((a, j) => a + j.ganho, 0);
+  const saldoTotal = +(ganhoTotal - gastoTotal).toFixed(2);
+  const roiTotal = gastoTotal ? (saldoTotal / gastoTotal * 100) : 0;
+  el.innerHTML = `
+    <div class="jogos-resumo-titulo">${nJogos} jogo${nJogos === 1 ? '' : 's'} · ${formatarMoeda(custoPorSorteio)} por sorteio · Período ativo: ${periodoLabel}</div>
+    <div class="mini-stats">
+      <div>Sorteios no período<b>${nSorteios}</b></div>
+      <div>Total apostado<b>${formatarMoeda(gastoTotal)}</b></div>
+      <div>Total ganho<b>${formatarMoeda(ganhoTotal)}</b></div>
+      <div>Saldo<b class="${saldoTotal >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(saldoTotal)}</b></div>
+      <div>ROI<b class="${roiTotal >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(roiTotal)}</b></div>
+    </div>`;
+}
+
+function construirDetalheJogoLotomania(container, jogo, canvasIdBase) {
+  const grid = document.createElement('div');
+  grid.className = 'jogos-detail-grid';
+
+  const graficosDiv = document.createElement('div');
+  graficosDiv.innerHTML = `
+    <div class="jogos-detail-titulo">Distribuição de acertos (Surpresa/15/16/17/18/19/20)</div>
+    <canvas id="${canvasIdBase}-dist"></canvas>
+    <div class="jogos-detail-titulo" style="margin-top:16px">Evolução do saldo acumulado</div>
+    <canvas id="${canvasIdBase}-evol"></canvas>`;
+
+  const listaDiv = document.createElement('div');
+  listaDiv.style.cssText = 'max-height:280px; overflow-y:auto;';
+  const tituloLista = document.createElement('div');
+  tituloLista.className = 'jogos-detail-titulo';
+  tituloLista.textContent = `Sorteios premiados (${jogo.historico.length})`;
+  listaDiv.appendChild(tituloLista);
+  if (!jogo.historico.length) {
+    const p = document.createElement('p');
+    p.style.cssText = 'color:var(--muted); font-size:12px;';
+    p.textContent = 'Nenhum sorteio premiado neste período.';
+    listaDiv.appendChild(p);
+  } else {
+    const table = document.createElement('table');
+    table.innerHTML = '<thead><tr><th>Concurso</th><th>Data</th><th>Faixa</th><th>Prêmio</th></tr></thead>';
+    const tbody = document.createElement('tbody');
+    [...jogo.historico].reverse().forEach(h => {
+      const tr = document.createElement('tr');
+      const surpresa = h.acertos === 0;
+      if (surpresa) tr.className = 'jogos-hist-surpresa';
+      const faixaTxt = surpresa ? '0️⃣ Surpresa' : `${h.acertos} pts`;
+      tr.innerHTML = `<td>${h.concurso}</td><td>${h.data}</td><td>${faixaTxt}</td><td>${formatarMoeda(h.premio)}</td>`;
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    listaDiv.appendChild(table);
+  }
+
+  grid.appendChild(graficosDiv);
+  grid.appendChild(listaDiv);
+  container.appendChild(grid);
+
+  // canvas precisa estar no DOM com layout resolvido antes do Chart.js medir
+  requestAnimationFrame(() => {
+    criarChart(`${canvasIdBase}-dist`, {
+      type: 'bar',
+      data: {
+        labels: ['Surpresa (0)', '15', '16', '17', '18', '19', '20'],
+        datasets: [{ data: [0, 15, 16, 17, 18, 19, 20].map(p => jogo.contagem[p]), backgroundColor: '#d97706', borderRadius: 4 }],
+      },
+      options: { ...chartDefaults, plugins: { legend: { display: false } } },
+    });
+    criarChart(`${canvasIdBase}-evol`, {
+      type: 'line',
+      data: {
+        labels: jogo.saldo_evolucao.map((_, i) => i + 1),
+        datasets: [{
+          data: jogo.saldo_evolucao, borderColor: '#fbbf24', backgroundColor: 'rgba(217,119,6,.15)',
+          fill: true, pointRadius: 0, borderWidth: 2, tension: .15,
+        }],
+      },
+      options: { ...chartDefaults, plugins: { legend: { display: false } } },
+    });
+  });
+}
+
+function renderJogosTabelaLotomania(jogos) {
+  const wrap = document.getElementById('jogos-tabela-wrap');
+  wrap.innerHTML = '';
+
+  const estado = ESTADO_ORDENACAO_JOGOS_LOTOMANIA;
+  const ordenados = [...jogos].sort((a, b) => {
+    const va = valorOrdenacaoJogoLotomania(a, estado.coluna), vb = valorOrdenacaoJogoLotomania(b, estado.coluna);
+    if (typeof va === 'string') return va.localeCompare(vb) * estado.direcao;
+    return (va - vb) * estado.direcao;
+  });
+
+  const melhorRoi = jogos.reduce((m, j) => (j.roi > m.roi ? j : m), jogos[0]);
+  const maisPremiado = jogos.reduce((m, j) => (j.total_premiado > m.total_premiado ? j : m), jogos[0]);
+  const maisSurpresa = jogos.reduce((m, j) => (j.contagem[0] > m.contagem[0] ? j : m), jogos[0]);
+
+  const table = document.createElement('table');
+  table.className = 'jogos-tabela';
+  const thead = document.createElement('thead');
+  const trHead = document.createElement('tr');
+  COLUNAS_JOGOS_LOTOMANIA.forEach(col => {
+    const th = document.createElement('th');
+    if (col.ordenavel) {
+      th.dataset.col = col.key;
+      const seta = estado.coluna === col.key ? (estado.direcao === 1 ? '▲' : '▼') : '';
+      th.innerHTML = `${col.label} <span class="sort-arrow">${seta}</span>`;
+      th.addEventListener('click', () => {
+        if (estado.coluna === col.key) estado.direcao *= -1;
+        else { estado.coluna = col.key; estado.direcao = col.key === 'nome' ? 1 : -1; }
+        renderJogosTabelaLotomania(jogos);
+      });
+    } else {
+      th.textContent = col.label;
+    }
+    trHead.appendChild(th);
+  });
+  thead.appendChild(trHead);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  ordenados.forEach((jogo, i) => {
+    const tr = document.createElement('tr');
+    tr.className = 'jogos-row ' + (jogo.saldo >= 0 ? 'saldo-pos' : 'saldo-neg');
+    const melhorTxt = jogo.melhor.concurso
+      ? `${jogo.melhor.acertos === 0 ? 'Surpresa (0 pts)' : jogo.melhor.acertos + ' pts'} (c.${jogo.melhor.concurso})`
+      : '—';
+    let nomeTxt = jogo.nome;
+    if (jogo === melhorRoi) nomeTxt += ' <span title="Melhor ROI">🏆</span>';
+    if (jogo === maisPremiado) nomeTxt += ' <span title="Mais sorteios premiados">🥇</span>';
+    if (jogo === maisSurpresa && jogo.contagem[0] > 0) {
+      nomeTxt += ' <span class="jogos-badge-surpresa" title="Mais faixas Surpresa (0 acertos) — a faixa mais divertida da Lotomania">🎯</span>';
+    }
+    tr.innerHTML = `
+      <td style="color:var(--muted)">${i + 1}</td>
+      <td>${nomeTxt}</td>
+      <td>${jogo.contagem[20]}</td>
+      <td>${jogo.contagem[19]}</td>
+      <td>${jogo.contagem[18]}</td>
+      <td>${jogo.contagem[17]}</td>
+      <td>${jogo.contagem[16]}</td>
+      <td>${jogo.contagem[15]}</td>
+      <td>${jogo.contagem[0]}</td>
+      <td>${jogo.total_premiado}</td>
+      <td>${formatarMoeda(jogo.gasto)}</td>
+      <td>${formatarMoeda(jogo.ganho)}</td>
+      <td class="${jogo.saldo >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(jogo.saldo)}</td>
+      <td class="${jogo.roi >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(jogo.roi)}</td>
+      <td>${melhorTxt}</td>`;
+    tbody.appendChild(tr);
+
+    const trDetail = document.createElement('tr');
+    trDetail.className = 'jogos-detail-row';
+    const tdDetail = document.createElement('td');
+    tdDetail.colSpan = COLUNAS_JOGOS_LOTOMANIA.length;
+    const inner = document.createElement('div');
+    inner.className = 'jogos-detail-inner';
+    tdDetail.appendChild(inner);
+    trDetail.appendChild(tdDetail);
+    tbody.appendChild(trDetail);
+
+    let construido = false;
+    tr.addEventListener('click', () => {
+      const aberto = inner.classList.contains('aberto');
+      if (!aberto && !construido) {
+        construirDetalheJogoLotomania(inner, jogo, 'jogoloto-' + i);
+        construido = true;
+      }
+      inner.classList.toggle('aberto', !aberto);
+    });
+  });
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+}
+
+function renderJogos(bundle, periodoId) {
+  const jogos = bundle.jogos;
+  const resumoEl = document.getElementById('jogos-resumo');
+  const tabelaWrapEl = document.getElementById('jogos-tabela-wrap');
+  if (!jogos || !jogos.length) {
+    resumoEl.innerHTML = '<p style="color:var(--muted)">Nenhum jogo configurado.</p>';
+    tabelaWrapEl.innerHTML = '';
+    return;
+  }
+  renderJogosResumoLotomania(jogos, bundle.meta.total, labelPeriodoParaJogos(periodoId));
+  renderJogosTabelaLotomania(jogos);
+}
+
 function renderPeriodoCompleto(bundle) {
   renderKpisPeriodo(bundle);
   renderPI(bundle);
@@ -2044,6 +2497,67 @@ function calcFaixaSurpresaJS(sorteiosMeta) {
   };
 }
 
+// espelha CUSTO_LOTOMANIA/FAIXA_LOTOMANIA/PRIORIDADE_FAIXA_LOTOMANIA/
+// calc_jogos_lotomania do Python — usado por calcJogosLotomaniaJS (mesclagem
+// client-side de múltiplos anos) e pelo simulador de apostas (ambos precisam
+// recalcular sobre um conjunto de sorteios que não existe pré-computado).
+const CUSTO_LOTOMANIA_JS = 3.00;
+const CAMPO_VALOR_FAIXA_LOTOMANIA_JS = {
+  20: 'valor_premio', 19: 'valor_dezenove', 18: 'valor_dezoito', 17: 'valor_dezessete',
+  16: 'valor_dezesseis', 15: 'valor_quinze', 0: 'valor_surpresa',
+};
+const NOME_FAIXA_LOTOMANIA_JS = {
+  20: 'vinte', 19: 'dezenove', 18: 'dezoito', 17: 'dezessete', 16: 'dezesseis', 15: 'quinze', 0: 'surpresa',
+};
+const PRIORIDADE_FAIXA_LOTOMANIA_JS = { 20: 7, 19: 6, 18: 5, 17: 4, 16: 3, 15: 2, 0: 1 };
+
+function calcJogosLotomaniaJS(jogosDict, sorteiosRaw, sorteiosMeta) {
+  const n = sorteiosRaw.length;
+  const resultado = [];
+  Object.entries(jogosDict).forEach(([nome, numeros]) => {
+    const conjunto = new Set(numeros);
+    const contagem = { 20: 0, 19: 0, 18: 0, 17: 0, 16: 0, 15: 0, 0: 0 };
+    const historico = [];
+    let ganho = 0;
+    const saldoEvolucao = [];
+    let acumulado = 0;
+    let melhor = { acertos: null, concurso: null, data: null };
+    let melhorPrioridade = 0;
+    sorteiosRaw.forEach((s, i) => {
+      const acertos = s.filter(d => conjunto.has(d)).length;
+      let premio = 0;
+      const meta = sorteiosMeta[i] || {};
+      if (acertos in contagem) {
+        contagem[acertos]++;
+        const campo = CAMPO_VALOR_FAIXA_LOTOMANIA_JS[acertos];
+        premio = meta[campo] || 0;
+        historico.push({ concurso: meta.concurso, data: meta.data, acertos, faixa: NOME_FAIXA_LOTOMANIA_JS[acertos], premio: +premio.toFixed(2) });
+        ganho += premio;
+        const prioridade = PRIORIDADE_FAIXA_LOTOMANIA_JS[acertos];
+        if (prioridade > melhorPrioridade) {
+          melhorPrioridade = prioridade;
+          melhor = { acertos, concurso: meta.concurso, data: meta.data };
+        }
+      }
+      acumulado += premio - CUSTO_LOTOMANIA_JS;
+      saldoEvolucao.push(+acumulado.toFixed(2));
+    });
+    const gasto = +(CUSTO_LOTOMANIA_JS * n).toFixed(2);
+    ganho = +ganho.toFixed(2);
+    const saldo = +(ganho - gasto).toFixed(2);
+    const roi = gasto ? +(saldo / gasto * 100).toFixed(1) : 0;
+    const totalPremiado = Object.values(contagem).reduce((a, b) => a + b, 0);
+    resultado.push({
+      nome, numeros: [...numeros].sort((a, b) => a - b), contagem,
+      total_premiado: totalPremiado,
+      pct_premiado: n ? +(totalPremiado / n * 100).toFixed(1) : 0,
+      gasto, ganho, saldo, roi, melhor, historico, saldo_evolucao: saldoEvolucao,
+    });
+  });
+  resultado.sort((a, b) => b.saldo - a.saldo);
+  return resultado;
+}
+
 function montarBundleFiltradoPorNumeros(sorteios, bundleBase) {
   const { distTamanho, topPorTamanho } = calcSequenciasJS(sorteios);
   return {
@@ -2145,6 +2659,7 @@ function aplicarPeriodo(periodoId) {
   renderPeriodoCompleto(bundle);
   renderFinanceiro(bundle);
   renderSurpresa(bundle);
+  renderJogos(bundle, periodoId);
   renderBannerPeriodo(periodoId, bundle);
   renderBlocosMensal(periodoId);
   aplicarFiltroPeriodoHistorico(periodoId);
@@ -2175,6 +2690,8 @@ function calcularBundleCompletoJS(sorteiosRaw, sorteiosMeta) {
     blocos: calcBlocosJS(sorteiosRaw),
     financeiro: calcFinanceiroJS(sorteiosMeta),
     faixa_surpresa: calcFaixaSurpresaJS(sorteiosMeta),
+    jogos: Object.keys(DATA.jogos_config || {}).length
+      ? calcJogosLotomaniaJS(DATA.jogos_config, sorteiosRaw, sorteiosMeta) : null,
     sorteios_raw: sorteiosRaw,
     sorteios_meta: sorteiosMeta,
   };
@@ -2229,6 +2746,7 @@ function aplicarPeriodoMultiAno(anos) {
   renderPeriodoCompleto(bundleAtualMerged);
   renderFinanceiro(bundleAtualMerged);
   renderSurpresa(bundleAtualMerged);
+  renderJogos(bundleAtualMerged, periodoAtualId);
   renderBannerPeriodoMulti(anos, bundleAtualMerged);
   renderBlocosMensalMulti(anos);
   aplicarFiltroPeriodoHistoricoMulti(anos);
@@ -2413,12 +2931,13 @@ document.getElementById('period-todos-btn').addEventListener('click', () => {
 
 renderSeletorCascata();
 
-// ── abas de página: Análise Geral / Blocos / Histórico ───────────────────────
+// ── abas de página: Análise Geral / Blocos / Histórico / Meus Jogos ──────────
 {
   const paginas = [
     { tab: 'page-tab-geral', pagina: 'page-geral' },
     { tab: 'page-tab-blocos', pagina: 'page-blocos' },
     { tab: 'page-tab-historico', pagina: 'page-historico' },
+    { tab: 'page-tab-jogos', pagina: 'page-jogos' },
   ];
   paginas.forEach(({ tab, pagina }) => {
     document.getElementById(tab).addEventListener('click', () => {
@@ -2532,6 +3051,332 @@ function renderBlocosMensalMulti(anos) {
     });
     el.innerHTML = html;
   }
+}
+
+// ── Simulador de apostas — separadores flexíveis + múltiplos jogos. Universo
+// 00-99, exatamente 50 dezenas por jogo (diferente da Lotofácil/Mega-Sena) ───
+function parseDezenasBrutasLotomania(texto) {
+  return texto.split(/[\s,;.\-]+/).map(s => s.trim()).filter(s => s.length > 0).map(Number);
+}
+function validarJogoTextoLotomania(texto) {
+  const brutas = parseDezenasBrutasLotomania(texto);
+  if (!brutas.length) return { status: 'vazio', validos: [] };
+  const foraDeRange = brutas.some(n => !Number.isInteger(n) || n < 0 || n > 99);
+  const validos = brutas.filter(n => Number.isInteger(n) && n >= 0 && n <= 99);
+  const repetidos = new Set(validos).size !== validos.length;
+  if (foraDeRange || repetidos) return { status: 'erro', validos };
+  if (validos.length === 50) return { status: 'ok', validos };
+  return { status: 'parcial', validos };
+}
+
+{
+  const listaEl = document.getElementById('sim-jogos-lista');
+  const btnAdd = document.getElementById('sim-btn-add');
+  const btnVerificar = document.getElementById('sim-btn');
+  const errEl = document.getElementById('sim-error');
+  const resultEl = document.getElementById('sim-result');
+
+  function renumerarJogos() {
+    listaEl.querySelectorAll('.sim-jogo-row').forEach((row, i) => {
+      row.querySelector('.sim-jogo-label').textContent = 'Jogo ' + (i + 1);
+    });
+    const rows = listaEl.querySelectorAll('.sim-jogo-row');
+    rows.forEach(row => {
+      row.querySelector('.sim-jogo-remove').style.visibility = rows.length > 1 ? 'visible' : 'hidden';
+    });
+  }
+
+  function atualizarBadge(row) {
+    const inputEl = row.querySelector('.sim-jogo-input');
+    const badge = row.querySelector('.sim-jogo-badge');
+    const v = validarJogoTextoLotomania(inputEl.value);
+    badge.classList.remove('ok', 'parcial', 'erro');
+    if (v.status === 'vazio') {
+      badge.textContent = '';
+    } else if (v.status === 'ok') {
+      badge.textContent = '✓ 50/50';
+      badge.classList.add('ok');
+    } else if (v.status === 'erro') {
+      badge.textContent = 'inválido/repetido';
+      badge.classList.add('erro');
+    } else {
+      badge.textContent = `${v.validos.length}/50 números`;
+      badge.classList.add('parcial');
+    }
+  }
+
+  function criarLinhaJogo() {
+    const row = document.createElement('div');
+    row.className = 'sim-jogo-row';
+
+    const label = document.createElement('span');
+    label.className = 'sim-jogo-label';
+    label.textContent = 'Jogo';
+    row.appendChild(label);
+
+    const inputEl = document.createElement('input');
+    inputEl.type = 'text';
+    inputEl.className = 'sim-jogo-input';
+    inputEl.placeholder = 'ex: 00, 02 05-06;07 09.11 13 ... (exatamente 50 números entre 00 e 99)';
+    inputEl.addEventListener('input', () => atualizarBadge(row));
+    row.appendChild(inputEl);
+
+    const badge = document.createElement('span');
+    badge.className = 'sim-jogo-badge';
+    row.appendChild(badge);
+
+    const btnRemove = document.createElement('button');
+    btnRemove.type = 'button';
+    btnRemove.className = 'sim-jogo-remove';
+    btnRemove.textContent = '🗑️';
+    btnRemove.addEventListener('click', () => {
+      if (listaEl.querySelectorAll('.sim-jogo-row').length <= 1) return;
+      row.remove();
+      renumerarJogos();
+    });
+    row.appendChild(btnRemove);
+
+    return row;
+  }
+
+  function definirQuantidade(n) {
+    listaEl.innerHTML = '';
+    for (let i = 0; i < n; i++) listaEl.appendChild(criarLinhaJogo());
+    renumerarJogos();
+  }
+
+  document.querySelectorAll('#sim-qtd-selector input[name="sim-qtd"]').forEach(radio => {
+    radio.addEventListener('change', () => { if (radio.checked) definirQuantidade(+radio.value); });
+  });
+  btnAdd.addEventListener('click', () => {
+    listaEl.appendChild(criarLinhaJogo());
+    renumerarJogos();
+  });
+
+  definirQuantidade(1); // estado inicial
+
+  function calcularResultadoLotomania(numeros, sorteiosRaw, sorteiosMeta) {
+    const aposta = new Set(numeros);
+    const pontos = { 0: 0, 15: 0, 16: 0, 17: 0, 18: 0, 19: 0, 20: 0 };
+    const concursosPontuados = [];
+    let ganho = 0;
+    sorteiosRaw.forEach((s, i) => {
+      const acertos = s.filter(d => aposta.has(d)).length;
+      const meta = sorteiosMeta[i];
+      if (acertos in pontos) {
+        pontos[acertos]++;
+        if (meta) {
+          const campo = CAMPO_VALOR_FAIXA_LOTOMANIA_JS[acertos];
+          const premio = meta[campo] || 0;
+          ganho += premio;
+          concursosPontuados.push({ concurso: meta.concurso, data: meta.data, acertos, premio: +premio.toFixed(2) });
+        }
+      }
+    });
+    concursosPontuados.sort((a, b) => b.concurso - a.concurso);
+    const totalPremios = Object.values(pontos).reduce((a, b) => a + b, 0);
+    const melhorPrioridade = concursosPontuados.length
+      ? Math.max(...concursosPontuados.map(c => PRIORIDADE_FAIXA_LOTOMANIA_JS[c.acertos])) : 0;
+    const totalSorteios = sorteiosRaw.length;
+    const custo = +(CUSTO_LOTOMANIA_JS * totalSorteios).toFixed(2);
+    ganho = +ganho.toFixed(2);
+    const saldo = +(ganho - custo).toFixed(2);
+    const roi = custo ? +(saldo / custo * 100).toFixed(1) : 0;
+    return { numeros, pontos, concursosPontuados, totalPremios, melhorPrioridade, totalSorteios, custo, ganho, saldo, roi };
+  }
+
+  function construirDetalhePainelLotomania(resultado) {
+    const painel = document.createElement('div');
+    painel.className = 'sim-detalhe-painel';
+    if (!resultado.concursosPontuados.length) {
+      painel.innerHTML = '<span style="color:var(--muted); font-size:12px;">Nenhum sorteio premiado.</span>';
+      return painel;
+    }
+    resultado.concursosPontuados.forEach(c => {
+      const item = document.createElement('span');
+      item.className = 'sim-detalhe-item';
+      const faixaTxt = c.acertos === 0 ? 'Surpresa' : `${c.acertos} pts`;
+      item.textContent = `Concurso ${c.concurso} (${c.data}) — ${faixaTxt}`;
+      painel.appendChild(item);
+    });
+    return painel;
+  }
+
+  function formatarNumerosLotomania(numeros) {
+    return [...numeros].sort((a, b) => a - b).map(n => String(n).padStart(2, '0')).join(' ');
+  }
+
+  let ultimosResultadosLotomania = []; // guardado para o botão "copiar resultado"
+
+  function renderizarResultadoUnicoLotomania(resultado) {
+    const total = resultado.totalSorteios;
+    const table = document.createElement('table');
+    table.innerHTML = `<thead><tr><th>Faixa</th><th>Vezes que ocorreu</th><th>% dos sorteios</th></tr></thead>`;
+    const tbody = document.createElement('tbody');
+    [20, 19, 18, 17, 16, 15, 0].forEach(p => {
+      const tr = document.createElement('tr');
+      const label = p === 0 ? 'Surpresa (0 pts)' : `${p} pontos`;
+      tr.innerHTML = `<td class="pontos">${label}</td><td>${resultado.pontos[p]}</td><td>${(resultado.pontos[p] / total * 100).toFixed(2)}%</td>`;
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    resultEl.appendChild(table);
+
+    const finDiv = document.createElement('div');
+    finDiv.className = 'mini-stats';
+    finDiv.innerHTML = `
+      <div>Sorteios no período<b>${total}</b></div>
+      <div>Custo total<b>${formatarMoeda(resultado.custo)}</b></div>
+      <div>Ganho estimado<b>${formatarMoeda(resultado.ganho)}</b></div>
+      <div>Saldo<b class="${resultado.saldo >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(resultado.saldo)}</b></div>
+      <div>ROI<b class="${resultado.roi >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(resultado.roi)}</b></div>`;
+    resultEl.appendChild(finDiv);
+
+    const btnToggle = document.createElement('button');
+    btnToggle.className = 'sim-detalhe-toggle';
+    btnToggle.style.marginTop = '10px';
+    btnToggle.textContent = `Ver em quais concursos pontuou (${resultado.concursosPontuados.length})`;
+    const painel = construirDetalhePainelLotomania(resultado);
+    btnToggle.addEventListener('click', () => {
+      painel.classList.toggle('aberto');
+      btnToggle.textContent = painel.classList.contains('aberto')
+        ? 'Esconder concursos'
+        : `Ver em quais concursos pontuou (${resultado.concursosPontuados.length})`;
+    });
+    resultEl.appendChild(btnToggle);
+    resultEl.appendChild(painel);
+  }
+
+  function renderizarResultadoComparativoLotomania(resultados) {
+    const maxPremios = Math.max(...resultados.map(r => r.totalPremios));
+    const maxPrioridade = Math.max(...resultados.map(r => r.melhorPrioridade));
+
+    const table = document.createElement('table');
+    table.innerHTML = `<thead><tr><th>#</th><th>20pts</th><th>19pts</th><th>18pts</th><th>17pts</th><th>16pts</th><th>15pts</th><th>Surpresa</th><th>Total prêmios</th><th>Custo</th><th>Ganho</th><th>Saldo</th><th>ROI</th></tr></thead>`;
+    const tbody = document.createElement('tbody');
+
+    resultados.forEach((r, i) => {
+      const tr = document.createElement('tr');
+      tr.className = 'sim-compare-row';
+      if (r.totalPremios === maxPremios && maxPremios > 0) tr.classList.add('destaque-ouro');
+      const trofeuIndividual = (r.melhorPrioridade === maxPrioridade && maxPrioridade > 0)
+        ? `<span class="sim-trofeu" title="Melhor faixa atingida entre os jogos simulados">🏆</span>` : '';
+      tr.innerHTML = `
+        <td>Jogo ${i + 1}${trofeuIndividual}</td>
+        <td>${r.pontos[20]}</td>
+        <td>${r.pontos[19]}</td>
+        <td>${r.pontos[18]}</td>
+        <td>${r.pontos[17]}</td>
+        <td>${r.pontos[16]}</td>
+        <td>${r.pontos[15]}</td>
+        <td>${r.pontos[0]}</td>
+        <td>${r.totalPremios}</td>
+        <td>${formatarMoeda(r.custo)}</td>
+        <td>${formatarMoeda(r.ganho)}</td>
+        <td class="${r.saldo >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(r.saldo)}</td>
+        <td class="${r.roi >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(r.roi)}</td>`;
+      tbody.appendChild(tr);
+
+      const trDetalhe = document.createElement('tr');
+      const tdDetalhe = document.createElement('td');
+      tdDetalhe.colSpan = 13;
+      const btnToggle = document.createElement('button');
+      btnToggle.className = 'sim-detalhe-toggle';
+      btnToggle.textContent = `Ver em quais concursos pontuou (${r.concursosPontuados.length})`;
+      const painel = construirDetalhePainelLotomania(r);
+      btnToggle.addEventListener('click', () => {
+        painel.classList.toggle('aberto');
+        btnToggle.textContent = painel.classList.contains('aberto')
+          ? 'Esconder concursos'
+          : `Ver em quais concursos pontuou (${r.concursosPontuados.length})`;
+      });
+      tdDetalhe.appendChild(btnToggle);
+      tdDetalhe.appendChild(painel);
+      trDetalhe.appendChild(tdDetalhe);
+      tbody.appendChild(trDetalhe);
+    });
+
+    table.appendChild(tbody);
+    resultEl.appendChild(table);
+  }
+
+  function copiarResultadoLotomania() {
+    if (!ultimosResultadosLotomania.length) return;
+    let texto;
+    if (ultimosResultadosLotomania.length === 1) {
+      const r = ultimosResultadosLotomania[0];
+      texto = `Simulação Lotomania — ${formatarNumerosLotomania(r.numeros)}\n`
+        + `20 pts: ${r.pontos[20]} | 19 pts: ${r.pontos[19]} | 18 pts: ${r.pontos[18]} | 17 pts: ${r.pontos[17]} | `
+        + `16 pts: ${r.pontos[16]} | 15 pts: ${r.pontos[15]} | Surpresa: ${r.pontos[0]} | Total prêmios: ${r.totalPremios}\n`
+        + `Sorteios: ${r.totalSorteios} | Custo: ${formatarMoeda(r.custo)} | Ganho: ${formatarMoeda(r.ganho)} | `
+        + `Saldo: ${formatarMoeda(r.saldo)} | ROI: ${formatarPct(r.roi)}`;
+    } else {
+      const linhas = ['#\t20pts\t19pts\t18pts\t17pts\t16pts\t15pts\tSurpresa\tTotal prêmios\tCusto\tGanho\tSaldo\tROI'];
+      ultimosResultadosLotomania.forEach((r, i) => {
+        linhas.push(`Jogo ${i + 1}\t${r.pontos[20]}\t${r.pontos[19]}\t${r.pontos[18]}\t${r.pontos[17]}\t${r.pontos[16]}\t${r.pontos[15]}\t${r.pontos[0]}\t${r.totalPremios}\t${formatarMoeda(r.custo)}\t${formatarMoeda(r.ganho)}\t${formatarMoeda(r.saldo)}\t${formatarPct(r.roi)}`);
+      });
+      texto = linhas.join('\n');
+    }
+    navigator.clipboard.writeText(texto).then(() => {
+      btnCopiar.textContent = '✓ Copiado!';
+      setTimeout(() => { btnCopiar.textContent = '📋 Copiar resultado'; }, 2000);
+    }).catch(() => {
+      btnCopiar.textContent = 'Não foi possível copiar';
+      setTimeout(() => { btnCopiar.textContent = '📋 Copiar resultado'; }, 2000);
+    });
+  }
+
+  const btnCopiar = document.createElement('button');
+  btnCopiar.type = 'button';
+  btnCopiar.className = 'sim-copiar-btn';
+  btnCopiar.textContent = '📋 Copiar resultado';
+  btnCopiar.style.display = 'none';
+  btnCopiar.addEventListener('click', copiarResultadoLotomania);
+
+  btnVerificar.addEventListener('click', () => {
+    errEl.style.display = 'none';
+    resultEl.innerHTML = '';
+    btnCopiar.style.display = 'none';
+
+    const linhas = [...listaEl.querySelectorAll('.sim-jogo-row')];
+    const validacoes = linhas.map(row => validarJogoTextoLotomania(row.querySelector('.sim-jogo-input').value));
+    const validos = [];
+    let ignorados = 0;
+    validacoes.forEach(v => {
+      if (v.status === 'ok') validos.push(v.validos);
+      else if (v.status !== 'vazio') ignorados++;
+    });
+
+    if (!validos.length) {
+      errEl.textContent = linhas.length === 1
+        ? 'Informe exatamente 50 números entre 00 e 99, sem repetição.'
+        : 'Nenhum jogo válido — cada um precisa de exatamente 50 números entre 00 e 99, sem repetição.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    // simula contra o período de análise ativo no momento (bundleAtivo() já
+    // resolve "todos"/1 ano/N anos mesclados)
+    const bundleSim = bundleAtivo() || DATA;
+    const sorteiosRawSim = bundleSim.sorteios_raw || DATA.sorteios_raw;
+    const sorteiosMetaSim = bundleSim.sorteios_meta || DATA.sorteios_meta || [];
+    ultimosResultadosLotomania = validos.map(v => calcularResultadoLotomania(v, sorteiosRawSim, sorteiosMetaSim));
+
+    if (ignorados > 0) {
+      const aviso = document.createElement('div');
+      aviso.className = 'sim-aviso';
+      aviso.textContent = `${ignorados} jogo(s) ignorado(s) por estarem incompletos ou inválidos.`;
+      resultEl.appendChild(aviso);
+    }
+
+    if (ultimosResultadosLotomania.length === 1) {
+      renderizarResultadoUnicoLotomania(ultimosResultadosLotomania[0]);
+    } else {
+      renderizarResultadoComparativoLotomania(ultimosResultadosLotomania);
+    }
+    resultEl.appendChild(btnCopiar);
+    btnCopiar.style.display = 'inline-block';
+  });
 }
 
 // ── Histórico — árvore Ano → Mês → Sorteio ───────────────────────────────────
@@ -3057,6 +3902,7 @@ def gerar_html(rows: list[dict], output: str, fonte_supabase: dict | None = None
     historico = calc_historico(rows, sorteios)
     financeiro = calc_financeiro(rows)
     faixa_surpresa = calc_faixa_surpresa(rows)
+    jogos = calc_jogos_lotomania(JOGOS_LOTOMANIA, rows, sorteios) if JOGOS_LOTOMANIA else None
     repeticoes = detectar_repeticoes_lotomania(rows)
     prob_repeticao_pct = prob_repeticao(n, TOTAL_COMBINACOES)
 
@@ -3093,6 +3939,8 @@ def gerar_html(rows: list[dict], output: str, fonte_supabase: dict | None = None
         "historico": historico,
         "financeiro": financeiro,
         "faixa_surpresa": faixa_surpresa,
+        "jogos": jogos,
+        "jogos_config": JOGOS_LOTOMANIA or {},
         "repeticoes": repeticoes,
         "prob_repeticao_pct": prob_repeticao_pct,
         "total_combinacoes": TOTAL_COMBINACOES,

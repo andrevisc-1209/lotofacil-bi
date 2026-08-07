@@ -21,18 +21,17 @@ from itertools import combinations
 from math import comb, exp
 from pathlib import Path
 
-# jogos pessoais pra validação financeira — placeholders ilustrativos.
-# Substituir pelos jogos reais do usuário antes de publicar (6 dezenas, 01-60).
 JOGOS_MEGA = {
-    "Jogo 1": [3, 11, 22, 34, 47, 58],
-    "Jogo 2": [5, 14, 19, 28, 41, 55],
-    "Jogo 3": [2, 9, 17, 26, 38, 50],
-    "Jogo 4": [7, 16, 24, 33, 45, 60],
-    "Jogo 5": [1, 12, 21, 30, 42, 53],
+    "Jogo 1": [5, 17, 23, 38, 42, 59],
+    "Jogo 2": [3, 12, 28, 35, 47, 56],
+    "Jogo 3": [8, 14, 22, 33, 45, 58],
+    "Jogo 4": [2, 19, 27, 36, 50, 60],
+    "Jogo 5": [7, 16, 24, 39, 43, 55],
 }
 
-# prêmios de referência (faixas sem valor real no banco) e custo por jogo —
-# sena (6 acertos) sempre usa o valor_premio real do sorteio, não uma referência fixa
+# fallback só para sorteios sem valor_quina/valor_quadra preenchido (não
+# deveria acontecer após o backfill — sena/quina/quadra usam sempre o valor
+# real daquele sorteio, ver calc_jogos_financeiro_mega).
 PREMIOS_MEGA = {5: 55434.22, 4: 1106.60}
 CUSTO_JOGO_MEGA = 5.00
 
@@ -320,13 +319,17 @@ def _meta_sorteio(row: dict) -> dict:
     """Metadados de um sorteio usados pelo simulador de aposta e pela mesclagem
     client-side de múltiplos anos: além de concurso/data, inclui valor_premio/
     acumulado — sem isso o JS não consegue recalcular o card financeiro nem o
-    ganho estimado do simulador sobre um período mesclado."""
+    ganho estimado do simulador sobre um período mesclado. valor_quina/
+    valor_quadra: valores reais por sorteio (ver CAMPO_VALOR_FAIXA_MEGA) —
+    sem isso o JS cairia sempre no PREMIOS_REF_JS fixo num período mesclado."""
     return {
         "concurso": _to_int(row["concurso"]),
         "data": row["data"],
         "valor_premio": _to_float(row.get("valor_premio")),
         "ganhadores": _to_int(row.get("ganhadores")) or 0,
         "acumulado": _acumulado_bool(row.get("acumulado")),
+        "valor_quina": _to_float(row.get("valor_quina")),
+        "valor_quadra": _to_float(row.get("valor_quadra")),
     }
 
 def calc_financeiro(rows_p: list[dict]) -> dict:
@@ -364,14 +367,16 @@ def calc_financeiro(rows_p: list[dict]) -> dict:
     }
 
 
+CAMPO_VALOR_FAIXA_MEGA = {4: "valor_quadra", 5: "valor_quina"}
+
 def calc_jogos_financeiro_mega(jogos_dict, rows_p, sorteios_p):
     """Validador financeiro completo de um dicionário {nome: [6 dezenas]} da
     Mega-Sena sobre um período — mesma arquitetura de calc_jogos_financeiro
     da Lotofácil, adaptada pra 3 faixas de prêmio (4/5/6 acertos em vez de
-    11-15). 6 acertos (sena) usa o valor_premio real do sorteio; 4 e 5
-    acertos (quadra/quina) usam PREMIOS_MEGA (referência fixa, mesma razão
-    documentada na Lotofácil: a API da Caixa não expõe o valor real dividido
-    entre ganhadores dessas faixas)."""
+    11-15). Todas as faixas (4/5/6) usam o valor real daquele sorteio
+    específico (valor_premio/valor_quina/valor_quadra) — a Mega-Sena não tem
+    faixa fixa nenhuma, todo prêmio é rateio. PREMIOS_MEGA só entra como
+    fallback pra sorteios antigos sem essas colunas preenchidas."""
     n = len(sorteios_p)
     resultado = []
     for nome, numeros in jogos_dict.items():
@@ -391,7 +396,9 @@ def calc_jogos_financeiro_mega(jogos_dict, rows_p, sorteios_p):
                 if acertos == 6:
                     premio = _to_float(row.get("valor_premio")) or 0.0
                 else:
-                    premio = PREMIOS_MEGA[acertos]
+                    premio = _to_float(row.get(CAMPO_VALOR_FAIXA_MEGA[acertos]))
+                    if premio is None:
+                        premio = PREMIOS_MEGA[acertos]
                 historico.append({
                     "concurso": _to_int(row["concurso"]),
                     "data": row["data"],
@@ -1345,6 +1352,7 @@ const ESTADO_ORDENACAO_JOGOS = {}; // por prefix: { coluna, direcao }
 // calcJogosFinanceiroJS quando o financeiro de "Meus jogos" precisa ser
 // recalculado no cliente (filtro multi-ano da Melhoria 2)
 const PREMIOS_REF_JS = { 4: 1106.60, 5: 55434.22 };
+const CAMPO_VALOR_FAIXA_MEGA_JS = { 4: 'valor_quadra', 5: 'valor_quina' };
 const CUSTO_JOGO_JS = 5.00;
 const COLUNAS_JOGOS = [
   { key: 'idx', label: '#', ordenavel: false },
@@ -2251,7 +2259,13 @@ function calcJogosFinanceiroJS(jogosDict, sorteiosRaw, sorteiosMeta, minAcertos,
       const meta = sorteiosMeta[i] || {};
       if (acertos >= minAcertos) {
         contagem[acertos]++;
-        premio = (acertos === maxAcertos) ? (meta.valor_premio || 0) : (premiosRef[acertos] || 0);
+        if (acertos === maxAcertos) {
+          premio = meta.valor_premio || 0;
+        } else {
+          const campo = CAMPO_VALOR_FAIXA_MEGA_JS[acertos];
+          const real = campo ? meta[campo] : undefined;
+          premio = (real !== undefined && real !== null) ? real : (premiosRef[acertos] || 0);
+        }
         historico.push({ concurso: meta.concurso, data: meta.data, acertos, premio: +premio.toFixed(2) });
         ganho += premio;
       }

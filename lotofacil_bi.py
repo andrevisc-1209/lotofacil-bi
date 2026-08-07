@@ -38,9 +38,10 @@ try:
 except ImportError:
     JOGOS_SUGERIDOS = None
 
-# prêmios de referência (faixas sem valor real no banco) e custo por jogo —
-# 15 acertos sempre usa o valor_premio real do sorteio, não uma referência fixa
-PREMIOS_REF = {14: 1677.94, 13: 25.00, 12: 10.00, 11: 5.00}
+# fallback só para sorteios sem valor_premio_14/13/12/11 preenchido (não
+# deveria acontecer após o backfill — todas as faixas usam o valor real por
+# sorteio, ver CAMPO_VALOR_FAIXA/calc_jogos_financeiro). Valores atuais (2026).
+PREMIOS_REF = {14: 1733.31, 13: 35.00, 12: 14.00, 11: 7.00}
 CUSTO_JOGO = 3.00
 
 
@@ -286,15 +287,20 @@ def prob_repeticao(n_sorteios: int, n_combinacoes: int) -> float:
     prob = 1 - exp(-n_sorteios * (n_sorteios - 1) / (2 * n_combinacoes))
     return round(prob * 100, 4)
 
+CAMPO_VALOR_FAIXA = {11: "valor_premio_11", 12: "valor_premio_12", 13: "valor_premio_13", 14: "valor_premio_14"}
+
 def calc_jogos_financeiro(jogos_dict, rows_p, sorteios_p):
     """Validador financeiro completo de um dicionário {nome: [15 dezenas]}
     sobre um período: contagem por faixa (11-15), histórico de sorteios em
     que pontuou (para a lista expandível e o mini gráfico), evolução do
     saldo acumulado sorteio a sorteio (para o gráfico de linha) e o
-    resultado financeiro final (gasto/ganho/saldo/ROI). 15 acertos usa o
-    valor_premio real do sorteio; 11-14 usam PREMIOS_REF (referência fixa,
-    não há como saber o valor real dividido entre ganhadores dessas faixas
-    a partir dos dados que a API da Caixa expõe publicamente)."""
+    resultado financeiro final (gasto/ganho/saldo/ROI). Todas as faixas (11-15)
+    usam o valor real daquele sorteio específico (colunas valor_premio /
+    valor_premio_14/13/12/11) — confirmado via API real que os valores de
+    11-14 acertos NÃO são fixos ao longo da história (mudaram por resolução
+    da Caixa várias vezes, ex.: 13 acertos passou de R$20 pra R$30 pra R$35).
+    PREMIOS_REF só entra como fallback pra sorteios antigos que por algum
+    motivo não tiveram essas colunas preenchidas no backfill."""
     n = len(sorteios_p)
     resultado = []
     for nome, numeros in jogos_dict.items():
@@ -314,7 +320,9 @@ def calc_jogos_financeiro(jogos_dict, rows_p, sorteios_p):
                 if acertos == 15:
                     premio = _to_float(row.get("valor_premio")) or 0.0
                 else:
-                    premio = PREMIOS_REF[acertos]
+                    premio = _to_float(row.get(CAMPO_VALOR_FAIXA[acertos]))
+                    if premio is None:
+                        premio = PREMIOS_REF[acertos]
                 historico.append({
                     "concurso": _to_int(row["concurso"]),
                     "data": row["data"],
@@ -599,13 +607,20 @@ def _meta_sorteio(row: dict) -> dict:
     """Metadados de um sorteio usados pelo simulador de aposta e pela mesclagem
     client-side de múltiplos anos (Melhoria 2): além de concurso/data, inclui
     valor_premio/acumulado — sem isso o JS não consegue recalcular o card
-    financeiro nem o ganho estimado do simulador sobre um período mesclado."""
+    financeiro nem o ganho estimado do simulador sobre um período mesclado.
+    valor_premio_14/13/12/11: valores reais por sorteio das faixas secundárias
+    (ver CAMPO_VALOR_FAIXA) — sem isso o JS cairia sempre no PREMIOS_REF_JS
+    fixo ao recalcular Meus Jogos sobre um período mesclado."""
     return {
         "concurso": _to_int(row["concurso"]),
         "data": row["data"],
         "valor_premio": _to_float(_campo(row, "valor_premio_1", "valor_premio")),
         "ganhadores": _to_int(_campo(row, "ganhadores_1", "ganhadores")) or 0,
         "acumulado": _acumulado_bool(_campo(row, "acumulado")),
+        "valor_premio_14": _to_float(row.get("valor_premio_14")),
+        "valor_premio_13": _to_float(row.get("valor_premio_13")),
+        "valor_premio_12": _to_float(row.get("valor_premio_12")),
+        "valor_premio_11": _to_float(row.get("valor_premio_11")),
     }
 
 def calc_financeiro(rows_p: list[dict]) -> dict:
@@ -1872,7 +1887,7 @@ const ESTADO_ORDENACAO_JOGOS = {}; // por prefix: { coluna, direcao }
 // espelham PREMIOS_REF/CUSTO_JOGO do Python — usados por calcJogosFinanceiroJS
 // quando o financeiro de "Meus jogos" precisa ser recalculado no cliente
 // (filtro multi-ano da Melhoria 2, onde não há bundle pré-computado)
-const PREMIOS_REF_JS = { 14: 1677.94, 13: 25.00, 12: 10.00, 11: 5.00 };
+const PREMIOS_REF_JS = { 14: 1733.31, 13: 35.00, 12: 14.00, 11: 7.00 };
 const CUSTO_JOGO_JS = 3.00;
 const COLUNAS_JOGOS = [
   { key: 'idx', label: '#', ordenavel: false },
@@ -2168,7 +2183,12 @@ function calcJogosFinanceiroJS(jogosDict, sorteiosRaw, sorteiosMeta, minAcertos,
       const meta = sorteiosMeta[i] || {};
       if (acertos >= minAcertos) {
         contagem[acertos]++;
-        premio = (acertos === maxAcertos) ? (meta.valor_premio || 0) : (premiosRef[acertos] || 0);
+        if (acertos === maxAcertos) {
+          premio = meta.valor_premio || 0;
+        } else {
+          const real = meta['valor_premio_' + acertos];
+          premio = (real !== undefined && real !== null) ? real : (premiosRef[acertos] || 0);
+        }
         historico.push({ concurso: meta.concurso, data: meta.data, acertos, premio: +premio.toFixed(2) });
         ganho += premio;
       }
@@ -4286,7 +4306,7 @@ if __name__ == "__main__":
     parser.add_argument("--github-repo", default="andrevisc-1209/lotofacil-bi",
                          help="dono/repositorio — usado só para linkar o botão 'Atualizar dados' à página Run workflow do GitHub Actions")
     parser.add_argument("--periodo", default=None, help="Filtra os dados antes de gerar o dashboard (ex: 2025, 2025-06)")
-    parser.add_argument("--output", default="index.html")
+    parser.add_argument("--output", default="lotofacil.html")
     args = parser.parse_args()
 
     fonte_supabase = None

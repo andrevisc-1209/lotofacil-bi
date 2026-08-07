@@ -49,9 +49,15 @@ CREATE TABLE IF NOT EXISTS megasena_sorteios (
 );
 """
 
+# faixas 2 (quina, 5 acertos) e 3 (quadra, 4 acertos) — adicionadas depois do
+# schema original. Confirmado via API real que são sempre variáveis (rateio
+# por sorteio, nunca fixas), então cada sorteio guarda seu próprio valor —
+# nunca usar uma constante fixa pra elas no código.
+COLUNAS_FAIXAS_SECUNDARIAS = ["valor_quina", "ganhadores_quina", "valor_quadra", "ganhadores_quadra"]
+
 COLUNAS = ["concurso", "data", "data_br", "acumulado", "valor_premio", "ganhadores"] + [
     f"d{i:02d}" for i in range(1, 7)
-]
+] + COLUNAS_FAIXAS_SECUNDARIAS
 
 
 # ─── conversão API da Caixa → linha do banco (comum aos dois backends) ───────
@@ -68,11 +74,19 @@ def montar_linha(data_api: dict) -> dict:
 
     valor_premio = None
     ganhadores = None
+    valor_quina = ganhadores_quina = None
+    valor_quadra = ganhadores_quadra = None
     for faixa in data_api.get("listaRateioPremio") or []:
-        if faixa.get("faixa") == 1:
+        n = faixa.get("faixa")
+        if n == 1:
             valor_premio = faixa.get("valorPremio")
             ganhadores = faixa.get("numeroDeGanhadores")
-            break
+        elif n == 2:
+            valor_quina = faixa.get("valorPremio")
+            ganhadores_quina = faixa.get("numeroDeGanhadores")
+        elif n == 3:
+            valor_quadra = faixa.get("valorPremio")
+            ganhadores_quadra = faixa.get("numeroDeGanhadores")
 
     linha = {
         "concurso": data_api.get("numero"),
@@ -81,6 +95,10 @@ def montar_linha(data_api: dict) -> dict:
         "acumulado": 1 if data_api.get("acumulado") else 0,
         "valor_premio": valor_premio,
         "ganhadores": ganhadores,
+        "valor_quina": valor_quina,
+        "ganhadores_quina": ganhadores_quina,
+        "valor_quadra": valor_quadra,
+        "ganhadores_quadra": ganhadores_quadra,
     }
     for i, d in enumerate(dezenas, start=1):
         linha[f"d{i:02d}"] = d
@@ -93,26 +111,42 @@ class _SQLiteBackend:
     def __init__(self, db_path: str):
         self.conn = sqlite3.connect(db_path)
         self.conn.execute(SCHEMA_SQLITE)
+        self._garantir_colunas_faixas_secundarias()
         self.conn.commit()
+
+    def _garantir_colunas_faixas_secundarias(self):
+        """valor_quina/ganhadores_quina/valor_quadra/ganhadores_quadra foram
+        adicionadas depois do schema original — ALTER TABLE idempotente pra
+        bancos já existentes."""
+        colunas_atuais = {row[1] for row in self.conn.execute(f"PRAGMA table_info({TABELA})")}
+        for coluna in COLUNAS_FAIXAS_SECUNDARIAS:
+            if coluna not in colunas_atuais:
+                tipo = "INTEGER" if coluna.startswith("ganhadores_") else "REAL"
+                self.conn.execute(f"ALTER TABLE {TABELA} ADD COLUMN {coluna} {tipo}")
 
     def ultimo_concurso(self) -> int:
         row = self.conn.execute(f"SELECT MAX(concurso) FROM {TABELA}").fetchone()
         return row[0] or 0
 
     def inserir_sorteios(self, registros: list[dict]) -> int:
-        placeholders = ", ".join("?" for _ in COLUNAS)
+        """Upsert (INSERT ... ON CONFLICT DO UPDATE): reprocessar um concurso
+        já existente atualiza a linha em vez de ser ignorado — necessário pro
+        backfill das faixas secundárias sobre o histórico já carregado."""
         colunas_sql = ", ".join(COLUNAS)
-        inseridos = 0
+        placeholders = ", ".join("?" for _ in COLUNAS)
+        update_sql = ", ".join(f"{c}=excluded.{c}" for c in COLUNAS if c != "concurso")
+        afetados = 0
         for dados in registros:
             valores = [dados.get(c) for c in COLUNAS]
             cursor = self.conn.execute(
-                f"INSERT OR IGNORE INTO {TABELA} ({colunas_sql}) VALUES ({placeholders})",
+                f"INSERT INTO {TABELA} ({colunas_sql}) VALUES ({placeholders}) "
+                f"ON CONFLICT(concurso) DO UPDATE SET {update_sql}",
                 valores,
             )
             if cursor.rowcount > 0:
-                inseridos += 1
+                afetados += 1
         self.conn.commit()
-        return inseridos
+        return afetados
 
     def carregar_todos(self) -> list[dict]:
         row_factory_original = self.conn.row_factory
@@ -174,12 +208,15 @@ class _SupabaseBackend:
         return linha
 
     def inserir_sorteios(self, registros: list[dict]) -> int:
+        """Upsert (resolution=merge-duplicates): reprocessar um concurso já
+        existente atualiza a linha em vez de ser ignorado — necessário pro
+        backfill das faixas secundárias sobre o histórico já carregado."""
         inseridos = 0
         for i in range(0, len(registros), self.LOTE):
             lote = [self._normalizar(r) for r in registros[i:i + self.LOTE]]
             status, corpo = self._request(
                 "POST", f"{TABELA}?on_conflict=concurso",
-                headers={"Prefer": "resolution=ignore-duplicates,return=representation"},
+                headers={"Prefer": "resolution=merge-duplicates,return=representation"},
                 body=lote,
             )
             if status >= 400:

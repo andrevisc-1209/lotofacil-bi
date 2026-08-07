@@ -21,6 +21,13 @@ CREATE TABLE IF NOT EXISTS lotomania_sorteios (
     -- sorteio, não só se o sorteio "foi surpresa" ou não.
     valor_surpresa     NUMERIC(15,2),
     ganhadores_surpresa INTEGER,
+    -- faixas 2-6 (19/18/17/16/15 acertos) — todas variáveis (rateio por
+    -- sorteio), mesmo motivo da faixa 7 acima.
+    valor_dezenove NUMERIC(15,2), ganhadores_dezenove INTEGER,
+    valor_dezoito NUMERIC(15,2), ganhadores_dezoito INTEGER,
+    valor_dezessete NUMERIC(15,2), ganhadores_dezessete INTEGER,
+    valor_dezesseis NUMERIC(15,2), ganhadores_dezesseis INTEGER,
+    valor_quinze NUMERIC(15,2), ganhadores_quinze INTEGER,
     -- 20 dezenas sorteadas (ordenadas)
     d01 SMALLINT, d02 SMALLINT, d03 SMALLINT, d04 SMALLINT, d05 SMALLINT,
     d06 SMALLINT, d07 SMALLINT, d08 SMALLINT, d09 SMALLINT, d10 SMALLINT,
