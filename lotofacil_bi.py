@@ -365,6 +365,8 @@ def calcular_bundle_periodo(rows_p, sorteios_p):
     digitos_finais = calc_digitos_finais(sorteios_p)
     cooc_completo_p = calc_coocorrencia_completa(sorteios_p)
     anticorrelacao = calc_anticorrelacao(cooc_completo_p, bottom_n=15)
+    meus_jogos_p = calc_meus_jogos(JOGOS, rows_p, sorteios_p) if JOGOS else None
+    jogos_sugeridos_p = calc_meus_jogos(JOGOS_SUGERIDOS, rows_p, sorteios_p) if JOGOS_SUGERIDOS else None
 
     return {
         "meta": {
@@ -394,6 +396,8 @@ def calcular_bundle_periodo(rows_p, sorteios_p):
         "grade": grade,
         "digitos_finais": digitos_finais,
         "anticorrelacao": [[[a, b], c] for (a, b), c in anticorrelacao],
+        "meus_jogos": meus_jogos_p,
+        "jogos_sugeridos": jogos_sugeridos_p,
     }
 
 def gerar_periodos(rows, sorteios):
@@ -1676,6 +1680,13 @@ function renderPeriodoCompleto(bundle) {
   renderDigitosFinais(bundle);
   renderAntiCorr(bundle);
   renderHotCold(bundle, hotcoldJanelaAtual);
+  // totalPeriodoBase existe só no bundle "filtrado por número" da grade
+  // interativa — meus_jogos não é recalculado pra combinações de dezenas
+  // (ver comentário em montarBundleFiltradoPorNumeros), então usa o total do
+  // período de onde os dados vieram, não o total (menor) do subconjunto filtrado
+  const totalParaJogos = bundle.meta.totalPeriodoBase || bundle.meta.total;
+  renderJogosSection(bundle.meus_jogos, IDS_MEUS_JOGOS, totalParaJogos);
+  renderJogosSection(bundle.jogos_sugeridos, IDS_JOGOS_SUGERIDOS, totalParaJogos);
 }
 
 // ── grade interativa 5×5 — substitui o heatmap estático da Visão Geral.
@@ -1692,6 +1703,21 @@ let numerosSelecionados = new Set();
 // documentado para historicoInicializado: renderPeriodoCompleto() já chama
 // renderHotCold() na primeira execução, antes do bloco original ser lido.
 let hotcoldJanelaAtual = 30;
+// configs de ids do "Meus jogos"/"Jogos sugeridos" — const declarada aqui (não
+// perto de renderJogosSection lá embaixo) pelo mesmo motivo de TDZ já visto
+// antes: renderPeriodoCompleto() já usa isso na primeira chamada.
+const IDS_MEUS_JOGOS = {
+  ranking: 'jogos-ranking', tabs: 'jogos-tabs', contents: 'jogos-contents',
+  rankingCard: 'jogos-ranking-card', detalheCard: 'jogos-detalhe-card', prefix: 'jogo',
+};
+const IDS_JOGOS_SUGERIDOS = {
+  ranking: 'jogos-sug-ranking', tabs: 'jogos-sug-tabs', contents: 'jogos-sug-contents',
+  rankingCard: 'jogos-sug-ranking-card', detalheCard: 'jogos-sug-detalhe-card', prefix: 'jogo-sug',
+};
+// premiação oficial e valor da aposta — mesmo motivo de TDZ: calcularFinanceiro()
+// (usada dentro de renderJogosSection) já roda na primeira aplicarPeriodo()
+const VALOR_APOSTA = 3.50;
+const PREMIOS = { 15: 1966163.83, 14: 3195.82, 13: 35.00, 12: 14.00, 11: 7.00 };
 
 function renderNumGrid(bundle) {
   const grid = document.getElementById('numgrid');
@@ -1890,7 +1916,13 @@ function montarBundleFiltradoPorNumeros(sorteios, bundleBase) {
   const top5 = Object.entries(freq).map(([d, c]) => ({ d: +d, c })).sort((a, b) => b.c - a.c).slice(0, 5).map(x => x.d);
   const { distTamanho, topPorTamanho } = calcSequenciasJS(sorteios);
   return {
-    meta: { total: sorteios.length },
+    // totalPeriodoBase: total do período (não do subconjunto filtrado por
+    // número) — meus_jogos/jogos_sugeridos não são recalculados pra essa
+    // combinação de dezenas (mesma exceção documentada pra blocos/financeiro),
+    // então o % e o "gasto" deles precisam continuar batendo com o total do
+    // período em que os pct_total já foram calculados no Python, não com o
+    // total (menor) dos sorteios filtrados pela grade interativa.
+    meta: { total: sorteios.length, totalPeriodoBase: bundleBase.meta.total },
     frequencia: freq,
     atraso: calcAtrasoJS(sorteios),
     pares_impares: calcParesImparesJS(sorteios),
@@ -1908,6 +1940,8 @@ function montarBundleFiltradoPorNumeros(sorteios, bundleBase) {
     grade: calcGradeJS(sorteios),
     digitos_finais: calcDigitosFinaisJS(sorteios),
     anticorrelacao: calcAntiCorrelacaoJS(sorteios, 15),
+    meus_jogos: bundleBase.meus_jogos,
+    jogos_sugeridos: bundleBase.jogos_sugeridos,
   };
 }
 
@@ -2747,10 +2781,6 @@ function validarJogoTexto(texto) {
   });
 }
 
-// ── Premiação oficial e valor da aposta ──────────────────────────────────────
-const VALOR_APOSTA = 3.50;
-const PREMIOS = { 15: 1966163.83, 14: 3195.82, 13: 35.00, 12: 14.00, 11: 7.00 };
-
 function formatarMoeda(v) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
@@ -2762,7 +2792,14 @@ function calcularFinanceiro(contagem, nSorteios) {
 }
 
 // ── Meus jogos — ranking + detalhamento (função reutilizável) ───────────────
-function renderJogosSection(jogos, ids) {
+function renderJogosSection(jogos, ids, nSorteios) {
+  const rankingEl = document.getElementById(ids.ranking);
+  const tabsElLimpar = document.getElementById(ids.tabs);
+  const contentsElLimpar = document.getElementById(ids.contents);
+  if (rankingEl) rankingEl.innerHTML = '';
+  if (tabsElLimpar) tabsElLimpar.innerHTML = '';
+  if (contentsElLimpar) contentsElLimpar.innerHTML = '';
+
   if (!jogos) {
     [ids.rankingCard, ids.detalheCard].forEach(id => {
       const el = document.getElementById(id);
@@ -2777,7 +2814,6 @@ function renderJogosSection(jogos, ids) {
   // ranking
   {
     const container = document.getElementById(ids.ranking);
-    const nSorteios = DATA.meta.total;
     const entries = nomes.map(nome => [nome, jogos[nome]]).sort((a, b) => b[1].total - a[1].total);
 
     const gastoTotal = nSorteios * VALOR_APOSTA;
@@ -2848,7 +2884,7 @@ function renderJogosSection(jogos, ids) {
       const tbody = document.createElement('tbody');
       for (let p = 15; p >= 11; p--) {
         const vezes = c[String(p)];
-        const pct = (vezes / DATA.meta.total * 100).toFixed(1);
+        const pct = (vezes / nSorteios * 100).toFixed(1);
         const tr = document.createElement('tr');
         tr.innerHTML = `<td>${p}</td><td>${vezes}</td><td>${pct}%</td><td>${faixas[p]}</td>`;
         tbody.appendChild(tr);
@@ -2858,7 +2894,7 @@ function renderJogosSection(jogos, ids) {
       div.innerHTML = `<div style="margin-bottom:14px">${tags}</div>`;
       div.appendChild(table);
 
-      const { ganho, gasto, saldo } = calcularFinanceiro(c, DATA.meta.total);
+      const { ganho, gasto, saldo } = calcularFinanceiro(c, nSorteios);
       const saldoClasse = saldo >= 0 ? 'money-pos' : 'money-neg';
 
       const stats = document.createElement('div');
@@ -2866,7 +2902,7 @@ function renderJogosSection(jogos, ids) {
       stats.innerHTML = `
         <div>Total ≥11<b>${info.total}</b></div>
         <div>% dos sorteios<b>${info.pct_total}%</b></div>
-        <div>Gasto (${DATA.meta.total} apostas)<b>${formatarMoeda(gasto)}</b></div>
+        <div>Gasto (${nSorteios} apostas)<b>${formatarMoeda(gasto)}</b></div>
         <div>Ganho<b>${formatarMoeda(ganho)}</b></div>
         <div>Saldo<b class="${saldoClasse}">${formatarMoeda(saldo)}</b></div>
         <div>Melhor resultado<b style="font-size:13px">${melhorTxt}</b></div>`;
@@ -2877,15 +2913,6 @@ function renderJogosSection(jogos, ids) {
   }
 }
 
-renderJogosSection(DATA.meus_jogos, {
-  ranking: 'jogos-ranking', tabs: 'jogos-tabs', contents: 'jogos-contents',
-  rankingCard: 'jogos-ranking-card', detalheCard: 'jogos-detalhe-card', prefix: 'jogo',
-});
-
-renderJogosSection(DATA.jogos_sugeridos, {
-  ranking: 'jogos-sug-ranking', tabs: 'jogos-sug-tabs', contents: 'jogos-sug-contents',
-  rankingCard: 'jogos-sug-ranking-card', detalheCard: 'jogos-sug-detalhe-card', prefix: 'jogo-sug',
-});
 
 // ── Histórico — árvore Ano → Mês → Sorteio (Terceira aba) ────────────────────
 
@@ -3501,22 +3528,19 @@ def imprimir_relatorio_auditoria_periodo():
         "de distribuição, co-ocorrência entre blocos (o card \"Blocos por período — histórico "
         "completo\" é uma exceção INTENCIONAL: o próprio título já avisa que é sempre o "
         "histórico inteiro, serve pra mostrar tendência ao longo do tempo)",
+        "BLOCO 5/7 (corrigidos em auditoria anterior) — Anti-correlação, repetição do concurso "
+        "anterior, ciclo médio, trios, grade linha/coluna, dígitos finais, números quentes e "
+        "frios: todos lendo de bundle.*, recalculados por período",
     ]
     corrigido_nesta_auditoria = [
-        "BLOCO 5 — Anti-correlação (top 15 pares que MENOS saíram juntos): lia DATA.anticorrelacao "
-        "fixo; agora vem de bundle.anticorrelacao, recalculado por período (calc_anticorrelacao "
-        "sobre calc_coocorrencia_completa do subconjunto)",
-        "BLOCO 7 — Repetição do concurso anterior: lia DATA.repeticao_anterior fixo; agora "
-        "bundle.repeticao_anterior (calc_repeticao_anterior por período)",
-        "BLOCO 7 — Ciclo médio por dezena: lia DATA.ciclo_medio fixo; agora bundle.ciclo_medio",
-        "BLOCO 7 — Trios mais frequentes: lia DATA.trios fixo; agora bundle.trios (top 15 do período)",
-        "BLOCO 7 — Grade linha/coluna + mapa de calor do volante 5x5: lia DATA.grade/DATA.frequencia "
-        "fixos; agora bundle.grade/bundle.frequencia",
-        "BLOCO 7 — Dígitos finais (média por sorteio): lia DATA.digitos_finais fixo; agora "
-        "bundle.digitos_finais",
-        "BLOCO 7 — Números quentes e frios: comparava a janela de recência (15/30/50) contra o "
-        "histórico GERAL sempre; agora a janela e a linha de base usam só os sorteios do período "
-        "ativo (reaproveita obterIndicesSorteiosDoPeriodo, já usado pela grade interativa)",
+        "\"Meus jogos — ranking comparativo\" e \"Jogos sugeridos\": renderJogosSection() era "
+        "chamada UMA VEZ no carregamento da página lendo DATA.meus_jogos/DATA.jogos_sugeridos "
+        "fixos (histórico completo, 524 sorteios) — trocar de período não recalculava as "
+        "pontuações. calcular_bundle_periodo() no Python passou a chamar calc_meus_jogos(JOGOS, "
+        "rows_p, sorteios_p) por período; renderJogosSection() agora recebe (jogos, ids, "
+        "nSorteios) como parâmetros em vez de ler DATA.meta.total fixo internamente, limpa seus "
+        "containers antes de redesenhar (senão as linhas da tabela e as abas por jogo iam se "
+        "acumulando a cada troca de período) e entrou em renderPeriodoCompleto().",
     ]
     dados_financeiros_ja_existentes = [
         "calc_financeiro() já existia e já era chamado por período desde uma revisão anterior "
@@ -3527,9 +3551,11 @@ def imprimir_relatorio_auditoria_periodo():
     limitacao_conhecida = [
         "A grade interativa 5x5 (filtro por clique em dezenas) usa uma cópia em JavaScript dos "
         "cálculos acima (montarBundleFiltradoPorNumeros) pra não precisar pré-computar todas as "
-        "combinações possíveis de dezenas no servidor — blocos e financeiro continuam mostrando o "
-        "período ativo (não recalculados pela combinação de números selecionada), decisão de "
-        "escopo já documentada no código.",
+        "combinações possíveis de dezenas no servidor — blocos, financeiro e agora também "
+        "meus_jogos/jogos_sugeridos continuam mostrando o período ativo (não recalculados pela "
+        "combinação de números selecionada; o total usado no cálculo de gasto/percentual desses "
+        "jogos também é o do período, não o do subconjunto filtrado — ver totalPeriodoBase em "
+        "montarBundleFiltradoPorNumeros), decisão de escopo já documentada no código.",
     ]
 
     print("\n" + "=" * 70)
