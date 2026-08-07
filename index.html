@@ -22,7 +22,8 @@
   .wrap { width: 100%; max-width: 780px; text-align: center; }
   h1 { font-size: 30px; font-weight: 800; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 12px; }
   .sub { color: #6b7280; font-size: 14px; margin-bottom: 40px; }
-  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+  @media (max-width: 900px) { .cards { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
   a.card {
     display: block; text-decoration: none; color: inherit;
@@ -33,6 +34,7 @@
   a.card:hover { transform: translateY(-4px); box-shadow: 0 12px 36px rgba(0,0,0,.4); }
   a.card.lotofacil:hover { border-color: rgba(124,58,237,.5); box-shadow: 0 12px 36px rgba(124,58,237,.15); }
   a.card.megasena:hover { border-color: rgba(5,150,105,.5); box-shadow: 0 12px 36px rgba(5,150,105,.15); }
+  a.card.lotomania:hover { border-color: rgba(217,119,6,.5); box-shadow: 0 12px 36px rgba(217,119,6,.15); }
   .card-icon { font-size: 44px; margin-bottom: 14px; }
   .card-titulo { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
   .card-sub { color: #6b7280; font-size: 13px; margin-bottom: 20px; }
@@ -42,6 +44,7 @@
   }
   .lotofacil .card-cta { background: #7c3aed; }
   .megasena .card-cta { background: #059669; }
+  .lotomania .card-cta { background: #d97706; }
   footer { margin-top: 40px; color: #6b7280; font-size: 11px; }
 </style>
 </head>
@@ -60,6 +63,12 @@
       <div class="card-icon">💰</div>
       <div class="card-titulo">Mega-Sena</div>
       <div class="card-sub" id="menu-total-megasena">— sorteios</div>
+      <span class="card-cta">Abrir →</span>
+    </a>
+    <a class="card lotomania" href="lotomania.html">
+      <div class="card-icon">🎯</div>
+      <div class="card-titulo">Lotomania</div>
+      <div class="card-sub" id="menu-total-lotomania">— sorteios</div>
       <span class="card-cta">Abrir →</span>
     </a>
   </div>
@@ -90,6 +99,7 @@ async function contarSorteios(tabela, elId) {
 }
 contarSorteios('sorteios', 'menu-total-lotofacil');
 contarSorteios('megasena_sorteios', 'menu-total-megasena');
+contarSorteios('lotomania_sorteios', 'menu-total-lotomania');
 </script>
 </body>
 </html>
