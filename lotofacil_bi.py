@@ -2662,10 +2662,6 @@ renderSeletorCascata();
 // "Todos"; condensado aos meses do período ativo quando há filtro de ano/
 // semestre/trimestre/bimestre; oculto quando o filtro já é 1 mês só, já que
 // não faz sentido mostrar a média mensal de um único mês) ────────────────────
-function anoDoPeriodo(periodoId) {
-  if (periodoId === '__todos__') return null;
-  return periodoId.split('-')[0];
-}
 function ehPeriodoMesUnico(periodoId) {
   return /-M\d{2}$/.test(periodoId);
 }
@@ -2710,8 +2706,14 @@ function renderBlocosMensal(periodoId) {
   let dados = DATA.blocos_periodo || [];
   let titulo = '🗓️ Média por mês — histórico completo';
   if (periodoId !== '__todos__') {
-    const ano = anoDoPeriodo(periodoId);
-    dados = dados.filter(d => d.periodo.startsWith(ano + '-'));
+    // sorteioNoPeriodo() já resolve corretamente qualquer granularidade
+    // (ano/semestre/trimestre/bimestre) a partir do "YYYY-MM" de cada linha —
+    // um filtro só por prefixo de ano (bug anterior) mostrava os 12 meses do
+    // ano inteiro mesmo quando só um trimestre/semestre estava selecionado.
+    dados = dados.filter(d => {
+      const [anoStr, mesStr] = d.periodo.split('-');
+      return sorteioNoPeriodo(anoStr, +mesStr, periodoId);
+    });
     titulo = '🗓️ Blocos no período selecionado';
   }
   tituloEl.textContent = titulo;
@@ -3090,8 +3092,6 @@ function validarJogoTexto(texto) {
   const btnVerificar = document.getElementById('sim-btn');
   const errEl = document.getElementById('sim-error');
   const resultEl = document.getElementById('sim-result');
-  const sorteiosRaw = DATA.sorteios_raw;
-  const sorteiosMeta = DATA.sorteios_meta || [];
 
   function renumerarJogos() {
     listaEl.querySelectorAll('.sim-jogo-row').forEach((row, i) => {
@@ -3173,21 +3173,30 @@ function validarJogoTexto(texto) {
 
   definirQuantidade(1); // estado inicial
 
-  function calcularResultado(numeros) {
+  function calcularResultado(numeros, sorteiosRaw, sorteiosMeta) {
     const aposta = new Set(numeros);
     const pontos = new Array(16).fill(0);
     const concursosPontuados = [];
+    let ganho = 0;
     sorteiosRaw.forEach((s, i) => {
       const acertos = s.filter(d => aposta.has(d)).length;
       pontos[acertos]++;
       if (acertos >= 11 && sorteiosMeta[i]) {
-        concursosPontuados.push({ concurso: sorteiosMeta[i].concurso, data: sorteiosMeta[i].data, acertos });
+        const meta = sorteiosMeta[i];
+        const premio = acertos === 15 ? (meta.valor_premio || 0) : (PREMIOS_REF_JS[acertos] || 0);
+        ganho += premio;
+        concursosPontuados.push({ concurso: meta.concurso, data: meta.data, acertos, premio: +premio.toFixed(2) });
       }
     });
     concursosPontuados.sort((a, b) => b.concurso - a.concurso);
     const totalPremios = pontos[11] + pontos[12] + pontos[13] + pontos[14] + pontos[15];
     const melhorIndividual = concursosPontuados.length ? Math.max(...concursosPontuados.map(c => c.acertos)) : 0;
-    return { numeros, pontos, concursosPontuados, totalPremios, melhorIndividual };
+    const totalSorteios = sorteiosRaw.length;
+    const custo = +(CUSTO_JOGO_JS * totalSorteios).toFixed(2);
+    ganho = +ganho.toFixed(2);
+    const saldo = +(ganho - custo).toFixed(2);
+    const roi = custo ? +(saldo / custo * 100).toFixed(1) : 0;
+    return { numeros, pontos, concursosPontuados, totalPremios, melhorIndividual, totalSorteios, custo, ganho, saldo, roi };
   }
 
   function construirDetalhePainel(resultado) {
@@ -3213,7 +3222,7 @@ function validarJogoTexto(texto) {
   let ultimosResultados = []; // guardado para o botão "copiar resultado"
 
   function renderizarResultadoUnico(resultado) {
-    const total = sorteiosRaw.length;
+    const total = resultado.totalSorteios;
     const table = document.createElement('table');
     table.innerHTML = `<thead><tr><th>Pontos</th><th>Vezes que ocorreu</th><th>% dos sorteios</th></tr></thead>`;
     const tbody = document.createElement('tbody');
@@ -3224,6 +3233,16 @@ function validarJogoTexto(texto) {
     }
     table.appendChild(tbody);
     resultEl.appendChild(table);
+
+    const finDiv = document.createElement('div');
+    finDiv.className = 'mini-stats';
+    finDiv.innerHTML = `
+      <div>Sorteios no período<b>${total}</b></div>
+      <div>Custo total<b>${formatarMoeda(resultado.custo)}</b></div>
+      <div>Ganho estimado<b>${formatarMoeda(resultado.ganho)}</b></div>
+      <div>Saldo<b class="${resultado.saldo >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(resultado.saldo)}</b></div>
+      <div>ROI<b class="${resultado.roi >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(resultado.roi)}</b></div>`;
+    resultEl.appendChild(finDiv);
 
     const btnToggle = document.createElement('button');
     btnToggle.className = 'sim-detalhe-toggle';
@@ -3245,7 +3264,7 @@ function validarJogoTexto(texto) {
     const maxIndividual = Math.max(...resultados.map(r => r.melhorIndividual));
 
     const table = document.createElement('table');
-    table.innerHTML = `<thead><tr><th>#</th><th>Números</th><th>15pts</th><th>14pts</th><th>13pts</th><th>12pts</th><th>11pts</th><th>Total prêmios</th></tr></thead>`;
+    table.innerHTML = `<thead><tr><th>#</th><th>Números</th><th>15pts</th><th>14pts</th><th>13pts</th><th>12pts</th><th>11pts</th><th>Total prêmios</th><th>Custo</th><th>Ganho</th><th>Saldo</th><th>ROI</th></tr></thead>`;
     const tbody = document.createElement('tbody');
 
     resultados.forEach((r, i) => {
@@ -3262,12 +3281,16 @@ function validarJogoTexto(texto) {
         <td>${r.pontos[13]}</td>
         <td>${r.pontos[12]}</td>
         <td>${r.pontos[11]}</td>
-        <td>${r.totalPremios}${trofeuIndividual}</td>`;
+        <td>${r.totalPremios}${trofeuIndividual}</td>
+        <td>${formatarMoeda(r.custo)}</td>
+        <td>${formatarMoeda(r.ganho)}</td>
+        <td class="${r.saldo >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(r.saldo)}</td>
+        <td class="${r.roi >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(r.roi)}</td>`;
       tbody.appendChild(tr);
 
       const trDetalhe = document.createElement('tr');
       const tdDetalhe = document.createElement('td');
-      tdDetalhe.colSpan = 8;
+      tdDetalhe.colSpan = 12;
       const btnToggle = document.createElement('button');
       btnToggle.className = 'sim-detalhe-toggle';
       btnToggle.textContent = `Ver em quais concursos pontuou (${r.concursosPontuados.length})`;
@@ -3295,11 +3318,13 @@ function validarJogoTexto(texto) {
       const r = ultimosResultados[0];
       texto = `Simulação — ${formatarNumeros(r.numeros)}\n`
         + `15 pts: ${r.pontos[15]} | 14 pts: ${r.pontos[14]} | 13 pts: ${r.pontos[13]} | `
-        + `12 pts: ${r.pontos[12]} | 11 pts: ${r.pontos[11]} | Total prêmios: ${r.totalPremios}`;
+        + `12 pts: ${r.pontos[12]} | 11 pts: ${r.pontos[11]} | Total prêmios: ${r.totalPremios}\n`
+        + `Sorteios: ${r.totalSorteios} | Custo: ${formatarMoeda(r.custo)} | Ganho: ${formatarMoeda(r.ganho)} | `
+        + `Saldo: ${formatarMoeda(r.saldo)} | ROI: ${formatarPct(r.roi)}`;
     } else {
-      const linhas = ['#\tNúmeros\t15pts\t14pts\t13pts\t12pts\t11pts\tTotal prêmios'];
+      const linhas = ['#\tNúmeros\t15pts\t14pts\t13pts\t12pts\t11pts\tTotal prêmios\tCusto\tGanho\tSaldo\tROI'];
       ultimosResultados.forEach((r, i) => {
-        linhas.push(`Jogo ${i + 1}\t${formatarNumeros(r.numeros)}\t${r.pontos[15]}\t${r.pontos[14]}\t${r.pontos[13]}\t${r.pontos[12]}\t${r.pontos[11]}\t${r.totalPremios}`);
+        linhas.push(`Jogo ${i + 1}\t${formatarNumeros(r.numeros)}\t${r.pontos[15]}\t${r.pontos[14]}\t${r.pontos[13]}\t${r.pontos[12]}\t${r.pontos[11]}\t${r.totalPremios}\t${formatarMoeda(r.custo)}\t${formatarMoeda(r.ganho)}\t${formatarMoeda(r.saldo)}\t${formatarPct(r.roi)}`);
       });
       texto = linhas.join('\n');
     }
@@ -3341,7 +3366,13 @@ function validarJogoTexto(texto) {
       return;
     }
 
-    ultimosResultados = validos.map(calcularResultado);
+    // simula contra o período de análise ativo no momento (bundleAtivo() já
+    // resolve "todos"/1 ano/N anos mesclados — antes o simulador sempre usava
+    // DATA.sorteios_raw fixo, ignorando o filtro de período selecionado)
+    const bundleSim = bundleAtivo() || DATA;
+    const sorteiosRawSim = bundleSim.sorteios_raw || DATA.sorteios_raw;
+    const sorteiosMetaSim = bundleSim.sorteios_meta || DATA.sorteios_meta || [];
+    ultimosResultados = validos.map(v => calcularResultado(v, sorteiosRawSim, sorteiosMetaSim));
 
     if (ignorados > 0) {
       const aviso = document.createElement('div');
