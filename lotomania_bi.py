@@ -86,17 +86,19 @@ def calc_pares_impares(sorteios):
 
 def calc_faixas(sorteios):
     """Distribuição por sorteio usando os MESMOS 5 blocos de 20 da aba
-    Blocos (00-19/20-39/40-59/60-79/80-99) — diferente da Mega-Sena/Lotofácil,
+    Blocos (01-20/21-40/41-60/61-80/81-00) — diferente da Mega-Sena/Lotofácil,
     que usam terços do universo: com 100 números não faz sentido inventar um
-    corte diferente do que já é mostrado na aba dedicada."""
+    corte diferente do que já é mostrado na aba dedicada. O bloco E "fecha o
+    ciclo": 81-99 mais o 00 (equivalente ao 100, que não existe nesse
+    universo zero-indexado)."""
     resultados = []
     for s in sorteios:
         resultados.append({
-            "A": sum(1 for d in s if 0 <= d <= 19),
-            "B": sum(1 for d in s if 20 <= d <= 39),
-            "C": sum(1 for d in s if 40 <= d <= 59),
-            "D": sum(1 for d in s if 60 <= d <= 79),
-            "E": sum(1 for d in s if 80 <= d <= 99),
+            "A": sum(1 for d in s if 1 <= d <= 20),
+            "B": sum(1 for d in s if 21 <= d <= 40),
+            "C": sum(1 for d in s if 41 <= d <= 60),
+            "D": sum(1 for d in s if 61 <= d <= 80),
+            "E": sum(1 for d in s if d == 0 or 81 <= d <= 99),
         })
     return resultados
 
@@ -230,12 +232,19 @@ def calc_repeticao_anterior(sorteios):
     return [len(set(sorteios[i]) & set(sorteios[i - 1])) for i in range(1, len(sorteios))]
 
 
-# ─── blocos de 20 (A: 00-19, B: 20-39, C: 40-59, D: 60-79, E: 80-99) ──────────
+# ─── blocos de 20 (A: 01-20, B: 21-40, C: 41-60, D: 61-80, E: 81-00) ──────────
+# Bloco E fecha o ciclo com o 00 (equivalente ao "100" que não existe nesse
+# universo zero-indexado) em vez do 0 abrir um bloco à parte — mantém a
+# mesma cara "01-20/21-40/..." de uma loteria 1-indexada, só trocando 100→00.
 
 BLOCOS_NOMES = ["A", "B", "C", "D", "E"]
+BLOCOS_DEZENAS = [
+    list(range(1, 21)), list(range(21, 41)), list(range(41, 61)),
+    list(range(61, 81)), list(range(81, 100)) + [0],
+]
 
 def bloco_de(d: int) -> int:
-    return d // 20
+    return 4 if d == 0 else (d - 1) // 20
 
 def _contagem_blocos(s) -> list:
     c = Counter(bloco_de(d) for d in s)
@@ -244,9 +253,8 @@ def _contagem_blocos(s) -> list:
 def calc_blocos_freq_individual(sorteios):
     freq = calc_frequencia(sorteios)
     resultado = {}
-    for i, nome in enumerate(BLOCOS_NOMES):
-        inicio = i * 20
-        resultado[nome] = {d: freq.get(d, 0) for d in range(inicio, inicio + 20)}
+    for nome, dezenas_bloco in zip(BLOCOS_NOMES, BLOCOS_DEZENAS):
+        resultado[nome] = {d: freq.get(d, 0) for d in dezenas_bloco}
     return resultado
 
 def calc_blocos_combinacoes(sorteios, top_n=15):
@@ -1103,17 +1111,17 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
 <div id="page-blocos" class="page-content" style="display:none;">
 <div class="kpis">
-  <div class="kpi"><span class="kpi-icon">🏆</span><div class="label">Bloco A (00-19) — campeão</div><div class="value" id="kpi-bloco-a">—</div><div class="sub" id="kpi-bloco-a-sub"></div></div>
-  <div class="kpi"><span class="kpi-icon">🏆</span><div class="label">Bloco B (20-39) — campeão</div><div class="value" id="kpi-bloco-b">—</div><div class="sub" id="kpi-bloco-b-sub"></div></div>
-  <div class="kpi"><span class="kpi-icon">🏆</span><div class="label">Bloco C (40-59) — campeão</div><div class="value" id="kpi-bloco-c">—</div><div class="sub" id="kpi-bloco-c-sub"></div></div>
-  <div class="kpi"><span class="kpi-icon">🏆</span><div class="label">Bloco D (60-79) — campeão</div><div class="value" id="kpi-bloco-d">—</div><div class="sub" id="kpi-bloco-d-sub"></div></div>
-  <div class="kpi"><span class="kpi-icon">🏆</span><div class="label">Bloco E (80-99) — campeão</div><div class="value" id="kpi-bloco-e">—</div><div class="sub" id="kpi-bloco-e-sub"></div></div>
+  <div class="kpi"><span class="kpi-icon">🏆</span><div class="label">Bloco A (01-20) — campeão</div><div class="value" id="kpi-bloco-a">—</div><div class="sub" id="kpi-bloco-a-sub"></div></div>
+  <div class="kpi"><span class="kpi-icon">🏆</span><div class="label">Bloco B (21-40) — campeão</div><div class="value" id="kpi-bloco-b">—</div><div class="sub" id="kpi-bloco-b-sub"></div></div>
+  <div class="kpi"><span class="kpi-icon">🏆</span><div class="label">Bloco C (41-60) — campeão</div><div class="value" id="kpi-bloco-c">—</div><div class="sub" id="kpi-bloco-c-sub"></div></div>
+  <div class="kpi"><span class="kpi-icon">🏆</span><div class="label">Bloco D (61-80) — campeão</div><div class="value" id="kpi-bloco-d">—</div><div class="sub" id="kpi-bloco-d-sub"></div></div>
+  <div class="kpi"><span class="kpi-icon">🏆</span><div class="label">Bloco E (81-00) — campeão</div><div class="value" id="kpi-bloco-e">—</div><div class="sub" id="kpi-bloco-e-sub"></div></div>
 </div>
 
 <!-- 1. Ranking de frequência individual por número, dentro de cada bloco -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card">
-    <h2>🏅 Ranking de frequência por bloco (00-19, 20-39, 40-59, 60-79, 80-99)</h2>
+    <h2>🏅 Ranking de frequência por bloco (01-20, 21-40, 41-60, 61-80, 81-00)</h2>
     <div class="blocos-grid" id="blocos-ranking-grid"></div>
   </div>
 </div>
@@ -1301,12 +1309,13 @@ function renderPI(bundle) {
 // ── Frequência por dezena em 5 abas de 20 (mesmos blocos A-E) — um único
 // gráfico de barras com 100 dezenas ficaria ilegível, então tabula por bloco
 // (troca de aba só redesenha o mesmo canvas, sem recriar o DOM) ─────────────
+function rangeArr(a, b) { const r = []; for (let i = a; i <= b; i++) r.push(i); return r; }
 const FREQ_TAB_RANGES = [
-  { nome: 'A', label: '00–19', inicio: 0 },
-  { nome: 'B', label: '20–39', inicio: 20 },
-  { nome: 'C', label: '40–59', inicio: 40 },
-  { nome: 'D', label: '60–79', inicio: 60 },
-  { nome: 'E', label: '80–99', inicio: 80 },
+  { nome: 'A', label: '01–20', dezenas: rangeArr(1, 20) },
+  { nome: 'B', label: '21–40', dezenas: rangeArr(21, 40) },
+  { nome: 'C', label: '41–60', dezenas: rangeArr(41, 60) },
+  { nome: 'D', label: '61–80', dezenas: rangeArr(61, 80) },
+  { nome: 'E', label: '81–00', dezenas: [...rangeArr(81, 99), 0] },
 ];
 let freqTabAtual = 'A';
 
@@ -1315,13 +1324,13 @@ function renderChartFreqRange(bundle, range) {
   const vals = Object.values(freq);
   const minV = Math.min(...vals), maxV = Math.max(...vals);
   const labels = [], data = [], colors = [];
-  for (let d = range.inicio; d < range.inicio + 20; d++) {
+  range.dezenas.forEach(d => {
     labels.push(String(d).padStart(2,'0'));
     const c = freq[d] || 0;
     data.push(c);
     const t = maxV > minV ? (c - minV) / (maxV - minV) : 0;
     colors.push(corGradienteAmbar(t));
-  }
+  });
   criarChart('chartFreq', {
     type: 'bar',
     data: { labels, datasets: [{ label: 'Vezes sorteada', data, backgroundColor: colors, borderRadius: 4 }] },
@@ -1370,7 +1379,7 @@ function renderChartFaixas(bundle) {
   criarChart('chartFaixas', {
     type: 'bar',
     data: {
-      labels: ['A (00-19)', 'B (20-39)', 'C (40-59)', 'D (60-79)', 'E (80-99)'],
+      labels: ['A (01-20)', 'B (21-40)', 'C (41-60)', 'D (61-80)', 'E (81-00)'],
       datasets: [{
         label: 'Média de dezenas por sorteio',
         data: [media.A/n, media.B/n, media.C/n, media.D/n, media.E/n].map(v=>+v.toFixed(2)),
@@ -1598,7 +1607,7 @@ function renderHotCold(bundle, janela) {
 function renderBlocos(bundle) {
   const b = bundle.blocos;
   const nomes = ['A','B','C','D','E'];
-  const faixaLabel = { A: '00 a 19', B: '20 a 39', C: '40 a 59', D: '60 a 79', E: '80 a 99' };
+  const faixaLabel = { A: '01 a 20', B: '21 a 40', C: '41 a 60', D: '61 a 80', E: '81 a 00' };
   const total = bundle.meta.total;
 
   const grid = document.getElementById('blocos-ranking-grid');
@@ -1843,11 +1852,11 @@ function calcParesImparesJS(sorteios) {
 }
 function calcFaixasJS(sorteios) {
   return sorteios.map(s => ({
-    A: s.filter(d => d >= 0 && d <= 19).length,
-    B: s.filter(d => d >= 20 && d <= 39).length,
-    C: s.filter(d => d >= 40 && d <= 59).length,
-    D: s.filter(d => d >= 60 && d <= 79).length,
-    E: s.filter(d => d >= 80 && d <= 99).length,
+    A: s.filter(d => d >= 1 && d <= 20).length,
+    B: s.filter(d => d >= 21 && d <= 40).length,
+    C: s.filter(d => d >= 41 && d <= 60).length,
+    D: s.filter(d => d >= 61 && d <= 80).length,
+    E: s.filter(d => d === 0 || (d >= 81 && d <= 99)).length,
   }));
 }
 function calcSomaJS(sorteios) { return sorteios.map(s => s.reduce((a, b) => a + b, 0)); }
@@ -1947,13 +1956,13 @@ function calcRepeticaoAnteriorJS(sorteios) {
 // seria inviável (2^N combinações) ───────────────────────────────────────────
 
 function calcBlocosJS(sorteios) {
-  const blocoDe = d => Math.floor(d / 20);
+  const blocoDe = d => d === 0 ? 4 : Math.floor((d - 1) / 20);
   const nomes = ['A', 'B', 'C', 'D', 'E'];
+  const dezenasPorBloco = [rangeArr(1, 20), rangeArr(21, 40), rangeArr(41, 60), rangeArr(61, 80), [...rangeArr(81, 99), 0]];
   const freqIndividual = {};
   nomes.forEach((nome, i) => {
-    const inicio = i * 20;
     freqIndividual[nome] = {};
-    for (let d = inicio; d < inicio + 20; d++) freqIndividual[nome][d] = 0;
+    dezenasPorBloco[i].forEach(d => { freqIndividual[nome][d] = 0; });
   });
   sorteios.forEach(s => s.forEach(d => { freqIndividual[nomes[blocoDe(d)]][d]++; }));
 
