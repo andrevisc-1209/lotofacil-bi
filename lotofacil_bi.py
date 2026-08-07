@@ -840,19 +840,34 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .sim-copiar-btn:hover { border-color: var(--accent); color: #a78bfa; }
   .money-pos { color: var(--green); font-weight: 700; }
   .money-neg { color: var(--red); font-weight: 700; }
-  /* seletor de período — barra flutuante, uma linha só, scroll horizontal */
+  /* seletor de período — card com grupos empilhados por tipo (Ano/Semestre
+     sempre visíveis; Trimestre/Bimestre/Mês atrás de um accordion) */
   .period-selector-wrap { padding: 14px 24px 0; position: sticky; top: 65px; z-index: 40; }
-  .period-selector {
-    display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;
-    overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin;
-    background: var(--bg3); border: 1px solid var(--border); border-radius: 12px;
-    padding: 8px 12px; box-shadow: 0 4px 20px rgba(0,0,0,.25);
+  .period-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; box-shadow: 0 4px 20px rgba(0,0,0,.25); }
+  .period-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .period-card-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+  .period-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+  .period-row:last-child { margin-bottom: 0; }
+  .period-row .tipo-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; width: 90px; flex-shrink: 0; padding-top: 5px; }
+  .period-row-scroll { display: flex; gap: 6px; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; -ms-overflow-style: none; padding-bottom: 2px; }
+  .period-row-scroll::-webkit-scrollbar { display: none; }
+  .period-btn {
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 10px; font-size: 12px; color: var(--text); cursor: pointer;
+    flex-shrink: 0; white-space: nowrap; transition: background .15s, border-color .15s, color .15s;
   }
-  .period-selector::-webkit-scrollbar { height: 4px; }
-  .period-group { display: flex; align-items: center; flex-wrap: nowrap; gap: 6px; flex-shrink: 0; }
-  .period-group .tipo-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; margin-right: 2px; flex-shrink: 0; }
-  .period-sep { color: var(--border); flex-shrink: 0; padding: 0 2px; user-select: none; }
-  @media (max-width: 640px) { .period-selector-wrap { top: 57px; padding: 10px 16px 0; } }
+  .period-btn:hover { border-color: var(--accent2); }
+  .period-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .period-accordion-toggle { background: transparent; border: none; color: var(--accent2); font-size: 11px; cursor: pointer; padding: 4px 0; text-align: left; flex-shrink: 0; }
+  .period-accordion-toggle:hover { text-decoration: underline; }
+  .period-row.colapsada .period-row-scroll { display: none; }
+  @media (max-width: 640px) {
+    .period-selector-wrap { top: 57px; padding: 10px 16px 0; }
+    .period-card { padding: 12px 14px; }
+    .period-row { flex-direction: column; align-items: stretch; gap: 4px; }
+    .period-row .tipo-label { width: auto; padding-top: 0; }
+    .period-btn { font-size: 11px; padding: 3px 8px; }
+  }
   /* banner do período ativo */
   .periodo-banner { margin: 12px 24px 0; padding: 10px 16px; background: rgba(245,158,11,.12); border: 1px solid var(--accent4); border-radius: 8px; color: #fbbf24; font-size: 13px; font-weight: 600; }
   .update-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -920,7 +935,15 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <div id="supabase-status" style="display:none;"></div>
 </header>
 
-<div class="period-selector-wrap"><div class="period-selector" id="period-selector"></div></div>
+<div class="period-selector-wrap">
+  <div class="period-card">
+    <div class="period-card-header">
+      <span class="period-card-title">Período de análise</span>
+      <button type="button" class="period-btn active" id="period-todos-btn" data-periodo="__todos__">Todos os dados</button>
+    </div>
+    <div id="period-selector"></div>
+  </div>
+</div>
 <div class="periodo-banner" id="periodo-banner" style="display:none;"></div>
 <div class="periodo-banner update-banner" id="update-banner" style="display:none;"></div>
 <div class="gh-feedback" id="gh-feedback" style="display:none;"></div>
@@ -1900,21 +1923,19 @@ function aplicarPeriodo(periodoId) {
   aplicarFiltroPeriodoHistorico(periodoId);
 }
 
-// ── seletor de período (Tarefa 4) — botões geram pelo Python, JS só troca o bundle
+// ── seletor de período — card com grupos empilhados por tipo. Ano/Semestre
+// sempre visíveis (poucos botões, alto valor); Trimestre/Bimestre/Mês vêm
+// colapsados atrás de um accordion "▼ Ver..." pra não lotar a tela com
+// dezenas de botões de uma vez. ────────────────────────────────────────────
 {
   const container = document.getElementById('period-selector');
+  const cardEl = container.parentNode;
+  const todosBtn = document.getElementById('period-todos-btn');
   const disponiveis = DATA.periodos_disponiveis || [];
   const tiposOrdem = ['ano', 'semestre', 'trimestre', 'bimestre', 'mes'];
   const tiposLabel = { ano: 'Ano', semestre: 'Semestre', trimestre: 'Trimestre', bimestre: 'Bimestre', mes: 'Mês' };
-
-  const linhaTodos = document.createElement('div');
-  linhaTodos.className = 'period-group';
-  const todosBtn = document.createElement('button');
-  todosBtn.className = 'tab active';
-  todosBtn.textContent = 'Todos';
-  todosBtn.dataset.periodo = '__todos__';
-  linhaTodos.appendChild(todosBtn);
-  container.appendChild(linhaTodos);
+  const tiposPlural = { ano: 'anos', semestre: 'semestres', trimestre: 'trimestres', bimestre: 'bimestres', mes: 'meses' };
+  const colapsadoPorPadrao = { ano: false, semestre: false, trimestre: true, bimestre: true, mes: true };
 
   const grupos = {};
   disponiveis.forEach(p => { (grupos[p.tipo] = grupos[p.tipo] || []).push(p); });
@@ -1922,32 +1943,52 @@ function aplicarPeriodo(periodoId) {
   tiposOrdem.forEach(tipo => {
     const lista = grupos[tipo];
     if (!lista || !lista.length) return;
-    const sep = document.createElement('span');
-    sep.className = 'period-sep';
-    sep.textContent = '|';
-    container.appendChild(sep);
-    const linha = document.createElement('div');
-    linha.className = 'period-group';
+
+    const row = document.createElement('div');
+    row.className = 'period-row' + (colapsadoPorPadrao[tipo] ? ' colapsada' : '');
+
     const label = document.createElement('span');
     label.className = 'tipo-label';
     label.textContent = tiposLabel[tipo] + ':';
-    linha.appendChild(label);
+    row.appendChild(label);
+
+    if (colapsadoPorPadrao[tipo]) {
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'period-accordion-toggle';
+      toggle.textContent = '▼ Ver ' + tiposPlural[tipo];
+      toggle.addEventListener('click', () => {
+        row.classList.toggle('colapsada');
+        const colapsadaAgora = row.classList.contains('colapsada');
+        toggle.textContent = (colapsadaAgora ? '▼ Ver ' : '▲ Esconder ') + tiposPlural[tipo];
+      });
+      row.appendChild(toggle);
+    }
+
+    const scroll = document.createElement('div');
+    scroll.className = 'period-row-scroll';
     lista.sort((a, b) => a.id.localeCompare(b.id)).forEach(p => {
       const btn = document.createElement('button');
-      btn.className = 'tab';
+      btn.type = 'button';
+      btn.className = 'period-btn';
       btn.textContent = p.label;
       btn.dataset.periodo = p.id;
-      linha.appendChild(btn);
+      scroll.appendChild(btn);
     });
-    container.appendChild(linha);
+    row.appendChild(scroll);
+    container.appendChild(row);
   });
 
+  function selecionarPeriodo(periodoId) {
+    cardEl.querySelectorAll('.period-btn').forEach(b => b.classList.toggle('active', b.dataset.periodo === periodoId));
+    aplicarPeriodo(periodoId);
+  }
+
+  todosBtn.addEventListener('click', () => selecionarPeriodo('__todos__'));
   container.addEventListener('click', (ev) => {
-    const btn = ev.target.closest('.tab');
+    const btn = ev.target.closest('.period-btn');
     if (!btn) return;
-    container.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    aplicarPeriodo(btn.dataset.periodo);
+    selecionarPeriodo(btn.dataset.periodo);
   });
 }
 
