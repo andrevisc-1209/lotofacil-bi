@@ -18,16 +18,29 @@ from collections import Counter, defaultdict
 from itertools import combinations
 from pathlib import Path
 
-try:
-    from lotofacil_simular import JOGOS, calcular_jogo
-except ImportError:
-    JOGOS = None
-    calcular_jogo = None
+JOGOS = {
+    "Jogo 1":  [1, 2, 5, 6, 7, 8, 9, 10, 12, 16, 17, 19, 20, 23, 25],
+    "Jogo 2":  [2, 5, 6, 7, 8, 9, 12, 14, 15, 18, 20, 21, 22, 24, 25],
+    "Jogo 3":  [1, 3, 5, 6, 8, 9, 10, 11, 12, 16, 20, 21, 22, 23, 24],
+    "Jogo 4":  [2, 3, 4, 6, 9, 12, 14, 15, 17, 18, 19, 20, 21, 22, 23],
+    "Jogo 5":  [2, 3, 4, 5, 9, 10, 11, 13, 14, 16, 17, 18, 19, 20, 21],
+    "Jogo 6":  [1, 2, 4, 8, 9, 10, 11, 14, 15, 16, 18, 19, 22, 23, 24],
+    "Jogo 7":  [1, 3, 5, 8, 9, 10, 11, 14, 16, 17, 18, 20, 23, 24, 25],
+    "Jogo 8":  [1, 2, 4, 5, 6, 8, 9, 11, 14, 16, 21, 22, 23, 24, 25],
+    "Jogo 9":  [1, 3, 4, 5, 6, 9, 10, 12, 13, 16, 17, 21, 22, 23, 25],
+    "Jogo 10": [1, 2, 4, 6, 7, 8, 10, 11, 13, 15, 16, 17, 22, 24, 25],
+    "Jogo 11": [1, 2, 3, 4, 6, 7, 9, 10, 11, 13, 19, 20, 23, 24, 25],
+}
 
 try:
     from lotofacil_jogos_sugeridos import JOGOS_SUGERIDOS
 except ImportError:
     JOGOS_SUGERIDOS = None
+
+# prêmios de referência (faixas sem valor real no banco) e custo por jogo —
+# 15 acertos sempre usa o valor_premio real do sorteio, não uma referência fixa
+PREMIOS_REF = {14: 1677.94, 13: 25.00, 12: 10.00, 11: 5.00}
+CUSTO_JOGO = 3.00
 
 
 # ─── carrega dados (CSV ou banco SQLite) ───────────────────────────────────────
@@ -235,20 +248,70 @@ def calc_anticorrelacao(cooc_completo, bottom_n=15):
     ao menos 1 vez, então pares com zero aparições já ficam excluídos aqui)."""
     return sorted(cooc_completo.items(), key=lambda kv: kv[1])[:bottom_n]
 
-def calc_meus_jogos(jogos_dict, rows, sorteios):
-    """Desempenho histórico de um dicionário {nome: [15 dezenas]}."""
-    n = len(sorteios)
-    resultados = {}
+def calc_jogos_financeiro(jogos_dict, rows_p, sorteios_p):
+    """Validador financeiro completo de um dicionário {nome: [15 dezenas]}
+    sobre um período: contagem por faixa (11-15), histórico de sorteios em
+    que pontuou (para a lista expandível e o mini gráfico), evolução do
+    saldo acumulado sorteio a sorteio (para o gráfico de linha) e o
+    resultado financeiro final (gasto/ganho/saldo/ROI). 15 acertos usa o
+    valor_premio real do sorteio; 11-14 usam PREMIOS_REF (referência fixa,
+    não há como saber o valor real dividido entre ganhadores dessas faixas
+    a partir dos dados que a API da Caixa expõe publicamente)."""
+    n = len(sorteios_p)
+    resultado = []
     for nome, numeros in jogos_dict.items():
-        r = calcular_jogo(set(numeros), rows, sorteios)
-        resultados[nome] = {
+        conjunto = set(numeros)
+        contagem = {11: 0, 12: 0, 13: 0, 14: 0, 15: 0}
+        historico = []
+        ganho = 0.0
+        saldo_evolucao = []
+        acumulado = 0.0
+        melhor = {"acertos": 0, "concurso": None, "data": None}
+
+        for row, s in zip(rows_p, sorteios_p):
+            acertos = len(conjunto & set(s))
+            premio = 0.0
+            if acertos >= 11:
+                contagem[acertos] += 1
+                if acertos == 15:
+                    premio = _to_float(row.get("valor_premio")) or 0.0
+                else:
+                    premio = PREMIOS_REF[acertos]
+                historico.append({
+                    "concurso": _to_int(row["concurso"]),
+                    "data": row["data"],
+                    "acertos": acertos,
+                    "premio": round(premio, 2),
+                })
+                ganho += premio
+            if acertos > melhor["acertos"]:
+                melhor = {"acertos": acertos, "concurso": _to_int(row["concurso"]), "data": row["data"]}
+            acumulado += premio - CUSTO_JOGO
+            saldo_evolucao.append(round(acumulado, 2))
+
+        gasto = round(CUSTO_JOGO * n, 2)
+        ganho = round(ganho, 2)
+        saldo = round(ganho - gasto, 2)
+        roi = round(saldo / gasto * 100, 1) if gasto else 0.0
+        total_premiado = sum(contagem.values())
+
+        resultado.append({
+            "nome": nome,
             "numeros": sorted(numeros),
-            "contagem": r["contagem"],
-            "total": r["total_premios"],
-            "pct_total": round(r["total_premios"] / n * 100, 1) if n else 0.0,
-            "melhor": r["melhor"],
-        }
-    return resultados
+            "contagem": contagem,
+            "total_premiado": total_premiado,
+            "pct_premiado": round(total_premiado / n * 100, 1) if n else 0.0,
+            "gasto": gasto,
+            "ganho": ganho,
+            "saldo": saldo,
+            "roi": roi,
+            "melhor": melhor,
+            "historico": historico,
+            "saldo_evolucao": saldo_evolucao,
+        })
+
+    resultado.sort(key=lambda x: x["saldo"], reverse=True)
+    return resultado
 
 def calc_numero_por_sorteio_historico(rows, sorteios):
     """Evolução de frequência acumulada dos top-5 números ao longo do tempo."""
@@ -365,8 +428,8 @@ def calcular_bundle_periodo(rows_p, sorteios_p):
     digitos_finais = calc_digitos_finais(sorteios_p)
     cooc_completo_p = calc_coocorrencia_completa(sorteios_p)
     anticorrelacao = calc_anticorrelacao(cooc_completo_p, bottom_n=15)
-    meus_jogos_p = calc_meus_jogos(JOGOS, rows_p, sorteios_p) if JOGOS else None
-    jogos_sugeridos_p = calc_meus_jogos(JOGOS_SUGERIDOS, rows_p, sorteios_p) if JOGOS_SUGERIDOS else None
+    meus_jogos_p = calc_jogos_financeiro(JOGOS, rows_p, sorteios_p) if JOGOS else None
+    jogos_sugeridos_p = calc_jogos_financeiro(JOGOS_SUGERIDOS, rows_p, sorteios_p) if JOGOS_SUGERIDOS else None
 
     return {
         "meta": {
@@ -782,6 +845,24 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .mini-stats b { color: var(--text); font-size: 16px; display: block; }
   .mini-stats b.money-pos { color: var(--green); }
   .mini-stats b.money-neg { color: var(--red); }
+  /* validador de jogos — resumo, tabela ordenável e detalhe expandível */
+  .jogos-resumo-titulo { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+  .jogos-resumo-sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  .jogos-tabela th[data-col] { cursor: pointer; user-select: none; white-space: nowrap; }
+  .jogos-tabela th[data-col]:hover { color: var(--text); }
+  .jogos-tabela th .sort-arrow { display: inline-block; width: 10px; opacity: .6; }
+  .jogos-row { cursor: pointer; }
+  .jogos-row.saldo-pos td { background: rgba(16,185,129,.06); }
+  .jogos-row.saldo-neg td { background: rgba(239,68,68,.06); }
+  .jogos-row:hover td { filter: brightness(1.15); }
+  .jogos-row .jogos-dezenas { font-family: monospace; font-size: 11px; color: var(--muted); }
+  .jogos-detail-row td { padding: 0; border-bottom: 1px solid #1e2130; }
+  .jogos-detail-inner { max-height: 0; overflow: hidden; transition: max-height .25s ease; padding: 0 16px; }
+  .jogos-detail-inner.aberto { max-height: 900px; padding: 16px; }
+  .jogos-detail-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; margin-bottom: 16px; }
+  @media (max-width: 900px) { .jogos-detail-grid { grid-template-columns: 1fr; } }
+  .jogos-detail-grid canvas { max-height: 200px; }
+  .jogos-detail-titulo { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 10px; }
   /* status badges for ciclo médio */
   .status-tag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
   .status-tag.dentro { background: rgba(16,185,129,.15); color: var(--green); }
@@ -877,15 +958,22 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   }
   .period-btn:hover { border-color: var(--accent2); }
   .period-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .period-accordion-toggle { background: transparent; border: none; color: var(--accent2); font-size: 11px; cursor: pointer; padding: 4px 0; text-align: left; flex-shrink: 0; }
-  .period-accordion-toggle:hover { text-decoration: underline; }
-  .period-row.colapsada .period-row-scroll { display: none; }
+  .period-btn:disabled { opacity: .35; cursor: not-allowed; }
+  .period-btn:disabled:hover { border-color: var(--border); }
+  /* nível 2 (radio "Ano completo/Semestre/Trimestre/Bimestre/Mês") e a
+     animação de entrada dos níveis 2/3 quando aparecem em cascata */
+  .period-nivel2-opcoes { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  .period-radio { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 12px; color: var(--text); }
+  .period-radio input { accent-color: var(--accent); cursor: pointer; }
+  .period-nivel { animation: periodNivelIn .2s ease; }
+  @keyframes periodNivelIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
   @media (max-width: 640px) {
     .period-selector-wrap { top: 57px; padding: 10px 16px 0; }
     .period-card { padding: 12px 14px; }
     .period-row { flex-direction: column; align-items: stretch; gap: 4px; }
     .period-row .tipo-label { width: auto; padding-top: 0; }
     .period-btn { font-size: 11px; padding: 3px 8px; }
+    .period-nivel2-opcoes { gap: 12px; }
   }
   /* banner do período ativo */
   .periodo-banner { margin: 12px 24px 0; padding: 10px 16px; background: rgba(245,158,11,.12); border: 1px solid var(--accent4); border-radius: 8px; color: #fbbf24; font-size: 13px; font-weight: 600; }
@@ -1192,42 +1280,26 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   </div>
 </div>
 
-<!-- Meus jogos — ranking -->
+<!-- Meus jogos — validador financeiro -->
 <div class="grid" style="grid-template-columns: 1fr;">
-  <div class="card" id="jogos-ranking-card">
-    <h2>🏅 Meus jogos — ranking comparativo (≥11 acertos)</h2>
-    <div id="jogos-ranking" style="overflow-x:auto;"></div>
+  <div class="card" id="jogos-card">
+    <h2>💰 Meus jogos — validador financeiro</h2>
+    <div id="jogos-resumo"></div>
+    <div id="jogos-tabela-wrap" style="overflow-x:auto; margin-top:16px;"></div>
   </div>
 </div>
 
-<!-- Meus jogos — detalhamento -->
+<!-- Jogos sugeridos — validador financeiro -->
 <div class="grid" style="grid-template-columns: 1fr;">
-  <div class="card" id="jogos-detalhe-card">
-    <h2>📋 Meus jogos — detalhamento por jogo</h2>
-    <div class="tabs" id="jogos-tabs"></div>
-    <div id="jogos-contents"></div>
-  </div>
-</div>
-
-<!-- Jogos sugeridos — ranking -->
-<div class="grid" style="grid-template-columns: 1fr;">
-  <div class="card" id="jogos-sug-ranking-card">
-    <h2>✨ Jogos sugeridos (30) — ranking comparativo (≥11 acertos)</h2>
+  <div class="card" id="jogos-sug-card">
+    <h2>✨ Jogos sugeridos (30) — validador financeiro</h2>
     <p style="color:var(--muted); font-size:12px; margin-bottom:12px;">
       Gerados seguindo os padrões estatísticos do histórico (soma, pares/ímpares, linha/coluna,
       pares e trios frequentes). Isto é autoconsistência estatística, não previsão — a Lotofácil
       é aleatória e todo jogo tem sempre a mesma probabilidade real de ganhar.
     </p>
-    <div id="jogos-sug-ranking" style="overflow-x:auto;"></div>
-  </div>
-</div>
-
-<!-- Jogos sugeridos — detalhamento -->
-<div class="grid" style="grid-template-columns: 1fr;">
-  <div class="card" id="jogos-sug-detalhe-card">
-    <h2>📋 Jogos sugeridos (30) — detalhamento por jogo</h2>
-    <div class="tabs" id="jogos-sug-tabs"></div>
-    <div id="jogos-sug-contents"></div>
+    <div id="jogos-sug-resumo"></div>
+    <div id="jogos-sug-tabela-wrap" style="overflow-x:auto; margin-top:16px;"></div>
   </div>
 </div>
 
@@ -1705,19 +1777,30 @@ let numerosSelecionados = new Set();
 let hotcoldJanelaAtual = 30;
 // configs de ids do "Meus jogos"/"Jogos sugeridos" — const declarada aqui (não
 // perto de renderJogosSection lá embaixo) pelo mesmo motivo de TDZ já visto
-// antes: renderPeriodoCompleto() já usa isso na primeira chamada.
-const IDS_MEUS_JOGOS = {
-  ranking: 'jogos-ranking', tabs: 'jogos-tabs', contents: 'jogos-contents',
-  rankingCard: 'jogos-ranking-card', detalheCard: 'jogos-detalhe-card', prefix: 'jogo',
-};
-const IDS_JOGOS_SUGERIDOS = {
-  ranking: 'jogos-sug-ranking', tabs: 'jogos-sug-tabs', contents: 'jogos-sug-contents',
-  rankingCard: 'jogos-sug-ranking-card', detalheCard: 'jogos-sug-detalhe-card', prefix: 'jogo-sug',
-};
-// premiação oficial e valor da aposta — mesmo motivo de TDZ: calcularFinanceiro()
-// (usada dentro de renderJogosSection) já roda na primeira aplicarPeriodo()
-const VALOR_APOSTA = 3.50;
-const PREMIOS = { 15: 1966163.83, 14: 3195.82, 13: 35.00, 12: 14.00, 11: 7.00 };
+// antes: renderPeriodoCompleto() já usa isso na primeira chamada. O cálculo
+// financeiro (ganho/gasto/saldo/ROI, histórico por sorteio, evolução de saldo)
+// agora vem pronto do Python em bundle.meus_jogos/jogos_sugeridos — o JS só
+// ordena e desenha, não recalcula dinheiro.
+const IDS_MEUS_JOGOS = { resumo: 'jogos-resumo', tabelaWrap: 'jogos-tabela-wrap', prefix: 'jogo' };
+const IDS_JOGOS_SUGERIDOS = { resumo: 'jogos-sug-resumo', tabelaWrap: 'jogos-sug-tabela-wrap', prefix: 'jogo-sug' };
+const ESTADO_ORDENACAO_JOGOS = {}; // por prefix: { coluna, direcao }
+const COLUNAS_JOGOS = [
+  { key: 'idx', label: '#', ordenavel: false },
+  { key: 'nome', label: 'Jogo', ordenavel: true },
+  { key: 'dezenas', label: 'Dezenas', ordenavel: false },
+  { key: 'p15', label: '15pts', ordenavel: true },
+  { key: 'p14', label: '14pts', ordenavel: true },
+  { key: 'p13', label: '13pts', ordenavel: true },
+  { key: 'p12', label: '12pts', ordenavel: true },
+  { key: 'p11', label: '11pts', ordenavel: true },
+  { key: 'total_premiado', label: 'Total≥11', ordenavel: true },
+  { key: 'pct_premiado', label: '% Premiado', ordenavel: true },
+  { key: 'gasto', label: 'Gasto', ordenavel: true },
+  { key: 'ganho', label: 'Ganho', ordenavel: true },
+  { key: 'saldo', label: 'Saldo', ordenavel: true },
+  { key: 'roi', label: 'ROI', ordenavel: true },
+  { key: 'melhor', label: 'Melhor resultado', ordenavel: false },
+];
 
 function renderNumGrid(bundle) {
   const grid = document.getElementById('numgrid');
@@ -2032,7 +2115,7 @@ function renderBannerPeriodo(periodoId, bundle) {
   const label = info ? info.label : periodoId;
   const inicio = bundle.meta.inicio || '—';
   const fim = bundle.meta.fim || '—';
-  banner.textContent = `⚠️ Exibindo dados de: ${label} (${bundle.meta.total} sorteios de ${inicio} a ${fim})`;
+  banner.textContent = `⚡ Exibindo: ${label} · ${bundle.meta.total} sorteios · ${inicio}–${fim}`;
   banner.style.display = 'block';
 }
 
@@ -2063,76 +2146,158 @@ function aplicarPeriodo(periodoId) {
   aplicarFiltroPeriodoHistorico(periodoId);
 }
 
-// ── seletor de período — card com grupos empilhados por tipo. Ano/Semestre
-// sempre visíveis (poucos botões, alto valor); Trimestre/Bimestre/Mês vêm
-// colapsados atrás de um accordion "▼ Ver..." pra não lotar a tela com
-// dezenas de botões de uma vez. ────────────────────────────────────────────
-{
-  const container = document.getElementById('period-selector');
-  const cardEl = container.parentNode;
-  const todosBtn = document.getElementById('period-todos-btn');
-  const disponiveis = DATA.periodos_disponiveis || [];
-  const tiposOrdem = ['ano', 'semestre', 'trimestre', 'bimestre', 'mes'];
-  const tiposLabel = { ano: 'Ano', semestre: 'Semestre', trimestre: 'Trimestre', bimestre: 'Bimestre', mes: 'Mês' };
-  const tiposPlural = { ano: 'anos', semestre: 'semestres', trimestre: 'trimestres', bimestre: 'bimestres', mes: 'meses' };
-  const colapsadoPorPadrao = { ano: false, semestre: false, trimestre: true, bimestre: true, mes: true };
+// ── seletor de período cascateado: Ano (sempre visível) → tipo de período
+// (Ano completo/Semestre/Trimestre/Bimestre/Mês, só aparece com um ano
+// escolhido) → intervalo específico (só aparece conforme o tipo, filtrado
+// pro ano ativo). Cada nível reseta o(s) nível(is) seguinte(s) ao mudar. ────
+let periodoCascata = { ano: 'todos', tipo: 'ano', subId: null };
+const MESES_LABEL_CASCATA = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+const TIPOS_NIVEL2 = [
+  ['ano', 'Ano completo'], ['semestre', 'Semestre'], ['trimestre', 'Trimestre'],
+  ['bimestre', 'Bimestre'], ['mes', 'Mês'],
+];
+const PREFIXO_TIPO = { semestre: 'S', trimestre: 'T', bimestre: 'B', mes: 'M' };
 
-  const grupos = {};
-  disponiveis.forEach(p => { (grupos[p.tipo] = grupos[p.tipo] || []).push(p); });
-
-  tiposOrdem.forEach(tipo => {
-    const lista = grupos[tipo];
-    if (!lista || !lista.length) return;
-
-    const row = document.createElement('div');
-    row.className = 'period-row' + (colapsadoPorPadrao[tipo] ? ' colapsada' : '');
-
-    const label = document.createElement('span');
-    label.className = 'tipo-label';
-    label.textContent = tiposLabel[tipo] + ':';
-    row.appendChild(label);
-
-    if (colapsadoPorPadrao[tipo]) {
-      const toggle = document.createElement('button');
-      toggle.type = 'button';
-      toggle.className = 'period-accordion-toggle';
-      toggle.textContent = '▼ Ver ' + tiposPlural[tipo];
-      toggle.addEventListener('click', () => {
-        row.classList.toggle('colapsada');
-        const colapsadaAgora = row.classList.contains('colapsada');
-        toggle.textContent = (colapsadaAgora ? '▼ Ver ' : '▲ Esconder ') + tiposPlural[tipo];
-      });
-      row.appendChild(toggle);
-    }
-
-    const scroll = document.createElement('div');
-    scroll.className = 'period-row-scroll';
-    lista.sort((a, b) => a.id.localeCompare(b.id)).forEach(p => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'period-btn';
-      btn.textContent = p.label;
-      btn.dataset.periodo = p.id;
-      scroll.appendChild(btn);
-    });
-    row.appendChild(scroll);
-    container.appendChild(row);
-  });
-
-  function selecionarPeriodo(periodoId) {
-    cardEl.querySelectorAll('.period-btn').forEach(b => b.classList.toggle('active', b.dataset.periodo === periodoId));
-    aplicarPeriodo(periodoId);
-  }
-
-  todosBtn.addEventListener('click', () => selecionarPeriodo('__todos__'));
-  container.addEventListener('click', (ev) => {
-    const btn = ev.target.closest('.period-btn');
-    if (!btn) return;
-    selecionarPeriodo(btn.dataset.periodo);
-  });
+function periodoFinalDaCascata() {
+  if (periodoCascata.ano === 'todos') return '__todos__';
+  if (periodoCascata.tipo === 'ano') return periodoCascata.ano;
+  return periodoCascata.subId || periodoCascata.ano;
 }
 
-aplicarPeriodo('__todos__');
+function renderSeletorCascata() {
+  const container = document.getElementById('period-selector');
+  const todosBtn = document.getElementById('period-todos-btn');
+  container.innerHTML = '';
+  todosBtn.classList.toggle('active', periodoCascata.ano === 'todos');
+
+  const disponiveis = DATA.periodos_disponiveis || [];
+  const anos = [...new Set(disponiveis.filter(p => p.tipo === 'ano').map(p => p.id))].sort();
+
+  // Nível 1 — Ano, sempre visível
+  const linhaAno = document.createElement('div');
+  linhaAno.className = 'period-row';
+  const labelAno = document.createElement('span');
+  labelAno.className = 'tipo-label';
+  labelAno.textContent = 'Ano:';
+  linhaAno.appendChild(labelAno);
+  const scrollAno = document.createElement('div');
+  scrollAno.className = 'period-row-scroll';
+  anos.forEach(ano => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'period-btn' + (periodoCascata.ano === ano ? ' active' : '');
+    btn.textContent = ano;
+    btn.dataset.ano = ano;
+    btn.addEventListener('click', () => {
+      periodoCascata = { ano, tipo: 'ano', subId: null };
+      renderSeletorCascata();
+    });
+    scrollAno.appendChild(btn);
+  });
+  linhaAno.appendChild(scrollAno);
+  container.appendChild(linhaAno);
+
+  if (periodoCascata.ano === 'todos') {
+    aplicarPeriodo('__todos__');
+    return;
+  }
+
+  // Nível 2 — tipo de período (radio), só aparece com um ano específico ativo
+  const linhaTipo = document.createElement('div');
+  linhaTipo.className = 'period-row period-nivel';
+  const labelTipo = document.createElement('span');
+  labelTipo.className = 'tipo-label';
+  labelTipo.textContent = 'Período:';
+  linhaTipo.appendChild(labelTipo);
+  const opcoesTipo = document.createElement('div');
+  opcoesTipo.className = 'period-nivel2-opcoes';
+  TIPOS_NIVEL2.forEach(([valor, texto]) => {
+    const lbl = document.createElement('label');
+    lbl.className = 'period-radio';
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'period-nivel2';
+    input.checked = periodoCascata.tipo === valor;
+    input.addEventListener('change', () => {
+      periodoCascata.tipo = valor;
+      periodoCascata.subId = null;
+      renderSeletorCascata();
+    });
+    lbl.appendChild(input);
+    lbl.appendChild(document.createTextNode(texto));
+    opcoesTipo.appendChild(lbl);
+  });
+  linhaTipo.appendChild(opcoesTipo);
+  container.appendChild(linhaTipo);
+
+  if (periodoCascata.tipo === 'ano') {
+    aplicarPeriodo(periodoCascata.ano);
+    return;
+  }
+
+  // Nível 3 — intervalo específico, filtrado pro ano ativo
+  const linhaSub = document.createElement('div');
+  linhaSub.className = 'period-row period-nivel';
+  const labelSub = document.createElement('span');
+  labelSub.className = 'tipo-label';
+  labelSub.innerHTML = '&nbsp;';
+  linhaSub.appendChild(labelSub);
+  const scrollSub = document.createElement('div');
+  scrollSub.className = 'period-row-scroll';
+
+  if (periodoCascata.tipo === 'mes') {
+    // mostra os 12 meses sempre — desabilita em cinza os que não têm dados
+    const idsExistentes = new Set(
+      disponiveis.filter(p => p.tipo === 'mes' && p.id.startsWith(periodoCascata.ano + '-M')).map(p => p.id)
+    );
+    for (let m = 1; m <= 12; m++) {
+      const id = `${periodoCascata.ano}-M${String(m).padStart(2, '0')}`;
+      const existe = idsExistentes.has(id);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'period-btn' + (periodoCascata.subId === id ? ' active' : '');
+      btn.textContent = MESES_LABEL_CASCATA[m - 1];
+      btn.dataset.periodo = id;
+      btn.disabled = !existe;
+      if (existe) {
+        btn.addEventListener('click', () => { periodoCascata.subId = id; renderSeletorCascata(); });
+      }
+      scrollSub.appendChild(btn);
+    }
+    if (!periodoCascata.subId || !idsExistentes.has(periodoCascata.subId)) {
+      periodoCascata.subId = idsExistentes.size ? [...idsExistentes].sort()[0] : null;
+    }
+  } else {
+    const prefixo = PREFIXO_TIPO[periodoCascata.tipo];
+    const opcoes = disponiveis
+      .filter(p => p.tipo === periodoCascata.tipo && p.id.startsWith(periodoCascata.ano + '-' + prefixo))
+      .sort((a, b) => a.id.localeCompare(b.id));
+    if (!periodoCascata.subId || !opcoes.some(p => p.id === periodoCascata.subId)) {
+      periodoCascata.subId = opcoes.length ? opcoes[0].id : null;
+    }
+    opcoes.forEach(p => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'period-btn' + (periodoCascata.subId === p.id ? ' active' : '');
+      btn.textContent = p.label;
+      btn.dataset.periodo = p.id;
+      btn.addEventListener('click', () => { periodoCascata.subId = p.id; renderSeletorCascata(); });
+      scrollSub.appendChild(btn);
+    });
+  }
+
+  linhaSub.appendChild(scrollSub);
+  container.appendChild(linhaSub);
+
+  aplicarPeriodo(periodoFinalDaCascata());
+}
+
+document.getElementById('period-todos-btn').addEventListener('click', () => {
+  periodoCascata = { ano: 'todos', tipo: 'ano', subId: null };
+  renderSeletorCascata();
+});
+
+renderSeletorCascata();
 
 // ── abas de página: Visão Geral / Blocos / Histórico ─────────────────────────
 {
@@ -2784,133 +2949,211 @@ function validarJogoTexto(texto) {
 function formatarMoeda(v) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
-
-function calcularFinanceiro(contagem, nSorteios) {
-  const ganho = [15, 14, 13, 12, 11].reduce((acc, p) => acc + contagem[String(p)] * PREMIOS[p], 0);
-  const gasto = nSorteios * VALOR_APOSTA;
-  return { ganho, gasto, saldo: ganho - gasto };
+function formatarPct(v) {
+  return (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
 }
 
-// ── Meus jogos — ranking + detalhamento (função reutilizável) ───────────────
-function renderJogosSection(jogos, ids, nSorteios) {
-  const rankingEl = document.getElementById(ids.ranking);
-  const tabsElLimpar = document.getElementById(ids.tabs);
-  const contentsElLimpar = document.getElementById(ids.contents);
-  if (rankingEl) rankingEl.innerHTML = '';
-  if (tabsElLimpar) tabsElLimpar.innerHTML = '';
-  if (contentsElLimpar) contentsElLimpar.innerHTML = '';
+// ── Meus jogos — validador financeiro (função reutilizável, "Meus jogos" e
+// "Jogos sugeridos" usam a mesma). O cálculo financeiro (ganho/gasto/saldo/
+// ROI, histórico de sorteios em que pontuou, evolução do saldo) já vem pronto
+// do Python em bundle.meus_jogos/jogos_sugeridos — aqui só ordena e desenha. ──
 
-  if (!jogos) {
-    [ids.rankingCard, ids.detalheCard].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.innerHTML = '<p style="color:var(--muted)">Nenhum jogo configurado.</p>';
-    });
-    return;
+
+function valorOrdenacaoJogo(jogo, coluna) {
+  switch (coluna) {
+    case 'nome': return jogo.nome;
+    case 'p15': return jogo.contagem[15];
+    case 'p14': return jogo.contagem[14];
+    case 'p13': return jogo.contagem[13];
+    case 'p12': return jogo.contagem[12];
+    case 'p11': return jogo.contagem[11];
+    case 'melhor': return jogo.melhor.acertos;
+    default: return jogo[coluna];
   }
+}
 
-  const nomes = Object.keys(jogos); // preserva a ordem de inserção
-  const faixas = { 15: '1ª (sena)', 14: '2ª', 13: '3ª', 12: '4ª', 11: '5ª' };
+function renderJogosResumo(jogos, ids, nSorteios) {
+  const el = document.getElementById(ids.resumo);
+  const nJogos = jogos.length;
+  const custoPorSorteio = nSorteios ? (jogos[0].gasto / nSorteios) * nJogos : 0;
+  const gastoTotal = jogos.reduce((a, j) => a + j.gasto, 0);
+  const ganhoTotal = jogos.reduce((a, j) => a + j.ganho, 0);
+  const saldoTotal = +(ganhoTotal - gastoTotal).toFixed(2);
+  const roiTotal = gastoTotal ? (saldoTotal / gastoTotal * 100) : 0;
+  el.innerHTML = `
+    <div class="jogos-resumo-titulo">${nJogos} jogo${nJogos === 1 ? '' : 's'} · ${formatarMoeda(custoPorSorteio)} por sorteio</div>
+    <div class="mini-stats">
+      <div>Sorteios no período<b>${nSorteios}</b></div>
+      <div>Total apostado<b>${formatarMoeda(gastoTotal)}</b></div>
+      <div>Total ganho<b>${formatarMoeda(ganhoTotal)}</b></div>
+      <div>Saldo<b class="${saldoTotal >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(saldoTotal)}</b></div>
+      <div>ROI<b class="${roiTotal >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(roiTotal)}</b></div>
+    </div>`;
+}
 
-  // ranking
-  {
-    const container = document.getElementById(ids.ranking);
-    const entries = nomes.map(nome => [nome, jogos[nome]]).sort((a, b) => b[1].total - a[1].total);
+function construirDetalheJogo(container, jogo, canvasIdBase) {
+  const grid = document.createElement('div');
+  grid.className = 'jogos-detail-grid';
 
-    const gastoTotal = nSorteios * VALOR_APOSTA;
-    const nota = document.createElement('p');
-    nota.style.cssText = 'color:var(--muted); font-size:12px; margin-bottom:12px;';
-    nota.textContent = `Considerando 1 aposta de ${formatarMoeda(VALOR_APOSTA)} em cada um dos ${nSorteios} sorteios `
-      + `analisados, o gasto é o mesmo para todos os jogos: ${formatarMoeda(gastoTotal)}.`;
-    container.appendChild(nota);
+  const graficosDiv = document.createElement('div');
+  graficosDiv.innerHTML = `
+    <div class="jogos-detail-titulo">Distribuição de acertos</div>
+    <canvas id="${canvasIdBase}-dist"></canvas>
+    <div class="jogos-detail-titulo" style="margin-top:16px">Evolução do saldo acumulado</div>
+    <canvas id="${canvasIdBase}-evol"></canvas>`;
 
+  const listaDiv = document.createElement('div');
+  listaDiv.style.cssText = 'max-height:280px; overflow-y:auto;';
+  const tituloLista = document.createElement('div');
+  tituloLista.className = 'jogos-detail-titulo';
+  tituloLista.textContent = `Sorteios em que pontuou (${jogo.historico.length})`;
+  listaDiv.appendChild(tituloLista);
+  if (!jogo.historico.length) {
+    const p = document.createElement('p');
+    p.style.cssText = 'color:var(--muted); font-size:12px;';
+    p.textContent = 'Nenhum sorteio com 11+ acertos neste período.';
+    listaDiv.appendChild(p);
+  } else {
     const table = document.createElement('table');
-    table.innerHTML = `<thead><tr><th>#</th><th>Jogo</th><th>15</th><th>14</th><th>13</th><th>12</th><th>11</th><th>Total ≥11</th><th>%</th><th>Gasto</th><th>Ganho</th><th>Saldo</th><th>Melhor</th></tr></thead>`;
+    table.innerHTML = '<thead><tr><th>Concurso</th><th>Data</th><th>Acertos</th><th>Prêmio</th></tr></thead>';
     const tbody = document.createElement('tbody');
-    entries.forEach(([nome, v], i) => {
-      const c = v.contagem;
-      const m = v.melhor;
-      const melhorTxt = m.concurso ? `${m.acertos} (c.${m.concurso})` : '—';
-      const { ganho, gasto, saldo } = calcularFinanceiro(c, nSorteios);
-      const saldoClasse = saldo >= 0 ? 'money-pos' : 'money-neg';
+    [...jogo.historico].reverse().forEach(h => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td style="color:var(--muted)">${i + 1}</td>
-        <td>${nome}</td>
-        <td>${c['15']}</td><td>${c['14']}</td><td>${c['13']}</td><td>${c['12']}</td><td>${c['11']}</td>
-        <td>${v.total}</td>
-        <td>${v.pct_total}%</td>
-        <td>${formatarMoeda(gasto)}</td>
-        <td>${formatarMoeda(ganho)}</td>
-        <td class="${saldoClasse}">${formatarMoeda(saldo)}</td>
-        <td>${melhorTxt}</td>`;
+      tr.innerHTML = `<td>${h.concurso}</td><td>${h.data}</td><td>${h.acertos}</td><td>${formatarMoeda(h.premio)}</td>`;
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
-    container.appendChild(table);
+    listaDiv.appendChild(table);
   }
 
-  // detalhamento por jogo (abas)
-  {
-    const tabsEl = document.getElementById(ids.tabs);
-    const contentsEl = document.getElementById(ids.contents);
+  grid.appendChild(graficosDiv);
+  grid.appendChild(listaDiv);
+  container.appendChild(grid);
 
-    nomes.forEach((nome, idx) => {
-      const panelId = `${ids.prefix}-${idx}`;
-      const tab = document.createElement('button');
-      tab.className = 'tab' + (idx === 0 ? ' active' : '');
-      tab.textContent = nome;
-      tab.addEventListener('click', () => {
-        tabsEl.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        contentsEl.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        document.getElementById(panelId).classList.add('active');
-      });
-      tabsEl.appendChild(tab);
-
-      const info = jogos[nome];
-      const div = document.createElement('div');
-      div.className = 'tab-content' + (idx === 0 ? ' active' : '');
-      div.id = panelId;
-
-      const tags = info.numeros.map(n => `<span class="seq-tag">${String(n).padStart(2,'0')}</span>`).join('');
-      const c = info.contagem;
-      const m = info.melhor;
-      const melhorTxt = m.concurso
-        ? `${m.acertos} acertos — concurso ${m.concurso} (${m.data})`
-        : 'nenhum acerto ≥11 registrado';
-
-      const table = document.createElement('table');
-      table.innerHTML = `<thead><tr><th>Acertos</th><th>Vezes</th><th>%</th><th>Faixa</th></tr></thead>`;
-      const tbody = document.createElement('tbody');
-      for (let p = 15; p >= 11; p--) {
-        const vezes = c[String(p)];
-        const pct = (vezes / nSorteios * 100).toFixed(1);
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${p}</td><td>${vezes}</td><td>${pct}%</td><td>${faixas[p]}</td>`;
-        tbody.appendChild(tr);
-      }
-      table.appendChild(tbody);
-
-      div.innerHTML = `<div style="margin-bottom:14px">${tags}</div>`;
-      div.appendChild(table);
-
-      const { ganho, gasto, saldo } = calcularFinanceiro(c, nSorteios);
-      const saldoClasse = saldo >= 0 ? 'money-pos' : 'money-neg';
-
-      const stats = document.createElement('div');
-      stats.className = 'mini-stats';
-      stats.innerHTML = `
-        <div>Total ≥11<b>${info.total}</b></div>
-        <div>% dos sorteios<b>${info.pct_total}%</b></div>
-        <div>Gasto (${nSorteios} apostas)<b>${formatarMoeda(gasto)}</b></div>
-        <div>Ganho<b>${formatarMoeda(ganho)}</b></div>
-        <div>Saldo<b class="${saldoClasse}">${formatarMoeda(saldo)}</b></div>
-        <div>Melhor resultado<b style="font-size:13px">${melhorTxt}</b></div>`;
-      div.appendChild(stats);
-
-      contentsEl.appendChild(div);
+  // canvas precisa estar no DOM com layout resolvido antes do Chart.js medir
+  requestAnimationFrame(() => {
+    criarChart(`${canvasIdBase}-dist`, {
+      type: 'bar',
+      data: {
+        labels: ['11', '12', '13', '14', '15'],
+        datasets: [{ data: [11, 12, 13, 14, 15].map(p => jogo.contagem[p]), backgroundColor: '#7c3aed', borderRadius: 4 }],
+      },
+      options: { ...chartDefaults, plugins: { legend: { display: false } } },
     });
+    criarChart(`${canvasIdBase}-evol`, {
+      type: 'line',
+      data: {
+        labels: jogo.saldo_evolucao.map((_, i) => i + 1),
+        datasets: [{
+          data: jogo.saldo_evolucao, borderColor: '#a78bfa', backgroundColor: 'rgba(124,58,237,.15)',
+          fill: true, pointRadius: 0, borderWidth: 2, tension: .15,
+        }],
+      },
+      options: { ...chartDefaults, plugins: { legend: { display: false } } },
+    });
+  });
+}
+
+function renderJogosTabela(jogos, ids, nSorteios) {
+  const wrap = document.getElementById(ids.tabelaWrap);
+  wrap.innerHTML = '';
+
+  const estado = ESTADO_ORDENACAO_JOGOS[ids.prefix] || { coluna: 'saldo', direcao: -1 };
+  ESTADO_ORDENACAO_JOGOS[ids.prefix] = estado;
+
+  const ordenados = [...jogos].sort((a, b) => {
+    const va = valorOrdenacaoJogo(a, estado.coluna), vb = valorOrdenacaoJogo(b, estado.coluna);
+    if (typeof va === 'string') return va.localeCompare(vb) * estado.direcao;
+    return (va - vb) * estado.direcao;
+  });
+
+  const melhorRoi = jogos.reduce((m, j) => (j.roi > m.roi ? j : m), jogos[0]);
+  const maisPremiado = jogos.reduce((m, j) => (j.total_premiado > m.total_premiado ? j : m), jogos[0]);
+
+  const table = document.createElement('table');
+  table.className = 'jogos-tabela';
+  const thead = document.createElement('thead');
+  const trHead = document.createElement('tr');
+  COLUNAS_JOGOS.forEach(col => {
+    const th = document.createElement('th');
+    if (col.ordenavel) {
+      th.dataset.col = col.key;
+      const seta = estado.coluna === col.key ? (estado.direcao === 1 ? '▲' : '▼') : '';
+      th.innerHTML = `${col.label} <span class="sort-arrow">${seta}</span>`;
+      th.addEventListener('click', () => {
+        if (estado.coluna === col.key) estado.direcao *= -1;
+        else { estado.coluna = col.key; estado.direcao = col.key === 'nome' ? 1 : -1; }
+        renderJogosTabela(jogos, ids, nSorteios);
+      });
+    } else {
+      th.textContent = col.label;
+    }
+    trHead.appendChild(th);
+  });
+  thead.appendChild(trHead);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  ordenados.forEach((jogo, i) => {
+    const tr = document.createElement('tr');
+    tr.className = 'jogos-row ' + (jogo.saldo >= 0 ? 'saldo-pos' : 'saldo-neg');
+    const dezenasTxt = jogo.numeros.map(n => String(n).padStart(2, '0')).join(' ');
+    const melhorTxt = jogo.melhor.concurso ? `${jogo.melhor.acertos} pts (c.${jogo.melhor.concurso})` : '—';
+    let nomeTxt = jogo.nome;
+    if (jogo === melhorRoi) nomeTxt += ' 🏆';
+    if (jogo === maisPremiado) nomeTxt += ' 🥇';
+    tr.innerHTML = `
+      <td style="color:var(--muted)">${i + 1}</td>
+      <td>${nomeTxt}</td>
+      <td class="jogos-dezenas">${dezenasTxt}</td>
+      <td>${jogo.contagem[15]}</td>
+      <td>${jogo.contagem[14]}</td>
+      <td>${jogo.contagem[13]}</td>
+      <td>${jogo.contagem[12]}</td>
+      <td>${jogo.contagem[11]}</td>
+      <td>${jogo.total_premiado}</td>
+      <td>${jogo.pct_premiado}%</td>
+      <td>${formatarMoeda(jogo.gasto)}</td>
+      <td>${formatarMoeda(jogo.ganho)}</td>
+      <td class="${jogo.saldo >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(jogo.saldo)}</td>
+      <td class="${jogo.roi >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(jogo.roi)}</td>
+      <td>${melhorTxt}</td>`;
+    tbody.appendChild(tr);
+
+    const trDetail = document.createElement('tr');
+    trDetail.className = 'jogos-detail-row';
+    const tdDetail = document.createElement('td');
+    tdDetail.colSpan = COLUNAS_JOGOS.length;
+    const inner = document.createElement('div');
+    inner.className = 'jogos-detail-inner';
+    tdDetail.appendChild(inner);
+    trDetail.appendChild(tdDetail);
+    tbody.appendChild(trDetail);
+
+    let construido = false;
+    tr.addEventListener('click', () => {
+      const aberto = inner.classList.contains('aberto');
+      if (!aberto && !construido) {
+        construirDetalheJogo(inner, jogo, ids.prefix + '-' + i);
+        construido = true;
+      }
+      inner.classList.toggle('aberto', !aberto);
+    });
+  });
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+}
+
+function renderJogosSection(jogos, ids, nSorteios) {
+  const resumoEl = document.getElementById(ids.resumo);
+  const tabelaWrapEl = document.getElementById(ids.tabelaWrap);
+  if (!jogos || !jogos.length) {
+    resumoEl.innerHTML = '<p style="color:var(--muted)">Nenhum jogo configurado.</p>';
+    tabelaWrapEl.innerHTML = '';
+    return;
   }
+  renderJogosResumo(jogos, ids, nSorteios);
+  renderJogosTabela(jogos, ids, nSorteios);
 }
 
 
@@ -3440,8 +3683,8 @@ def gerar_html(rows: list[dict], output: str, fonte_supabase: dict | None = None
     digitos_finais = calc_digitos_finais(sorteios)
     cooc_completo = calc_coocorrencia_completa(sorteios)
     anticorrelacao = calc_anticorrelacao(cooc_completo, bottom_n=15)
-    meus_jogos = calc_meus_jogos(JOGOS, rows, sorteios) if JOGOS else None
-    jogos_sugeridos = calc_meus_jogos(JOGOS_SUGERIDOS, rows, sorteios) if JOGOS_SUGERIDOS else None
+    meus_jogos = calc_jogos_financeiro(JOGOS, rows, sorteios) if JOGOS else None
+    jogos_sugeridos = calc_jogos_financeiro(JOGOS_SUGERIDOS, rows, sorteios) if JOGOS_SUGERIDOS else None
 
     blocos = calc_blocos_bundle(rows, sorteios)
     blocos_periodo = calc_blocos_periodo(rows, sorteios)
