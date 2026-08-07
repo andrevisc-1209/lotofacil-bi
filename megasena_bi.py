@@ -18,6 +18,7 @@ import argparse
 import json
 from collections import Counter, defaultdict
 from itertools import combinations
+from math import comb, exp
 from pathlib import Path
 
 # jogos pessoais pra validação financeira — placeholders ilustrativos.
@@ -120,6 +121,41 @@ def calc_anticorrelacao(cooc_completo, bottom_n=15):
     1 vez — pares com zero aparições já ficam fora do Counter)."""
     itens = sorted(cooc_completo.items(), key=lambda kv: kv[1])
     return itens[:bottom_n]
+
+
+# ─── detector de sorteios com dezenas idênticas (curiosidade estatística) ────
+
+TOTAL_COMBINACOES = comb(60, 6)  # universo de resultados possíveis da Mega-Sena
+
+def detectar_repeticoes(rows: list[dict]) -> list[dict]:
+    """Agrupa sorteios pelas 6 dezenas (ordenadas) e retorna só os grupos com
+    mais de 1 concurso — mesma lógica de detectar_repeticoes da Lotofácil,
+    calculada sobre o histórico completo (não depende de filtro de período)."""
+    grupos = defaultdict(list)
+    for r in rows:
+        chave = tuple(sorted(int(r[f"d{i:02d}"]) for i in range(1, 7)))
+        grupos[chave].append({
+            "concurso": _to_int(r["concurso"]),
+            "data": r.get("data_br") or r["data"],
+        })
+
+    repeticoes = []
+    for numeros, sorteios in grupos.items():
+        if len(sorteios) > 1:
+            repeticoes.append({
+                "numeros": list(numeros),
+                "vezes": len(sorteios),
+                "sorteios": sorted(sorteios, key=lambda x: x["concurso"]),
+            })
+    return sorted(repeticoes, key=lambda x: x["vezes"], reverse=True)
+
+def prob_repeticao(n_sorteios: int, n_combinacoes: int) -> float:
+    """Probabilidade aproximada (problema do aniversário) de pelo menos 1
+    repetição depois de n_sorteios sorteios."""
+    if n_sorteios < 2:
+        return 0.0
+    prob = 1 - exp(-n_sorteios * (n_sorteios - 1) / (2 * n_combinacoes))
+    return round(prob * 100, 4)
 
 def calc_sequencias_consecutivas(sorteios):
     """Runs de números consecutivos dentro de cada sorteio de 6 dezenas. Com
@@ -280,6 +316,19 @@ def _acumulado_bool(v) -> bool:
         return v.strip().lower() in ("1", "true", "sim")
     return False
 
+def _meta_sorteio(row: dict) -> dict:
+    """Metadados de um sorteio usados pelo simulador de aposta e pela mesclagem
+    client-side de múltiplos anos: além de concurso/data, inclui valor_premio/
+    acumulado — sem isso o JS não consegue recalcular o card financeiro nem o
+    ganho estimado do simulador sobre um período mesclado."""
+    return {
+        "concurso": _to_int(row["concurso"]),
+        "data": row["data"],
+        "valor_premio": _to_float(row.get("valor_premio")),
+        "ganhadores": _to_int(row.get("ganhadores")) or 0,
+        "acumulado": _acumulado_bool(row.get("acumulado")),
+    }
+
 def calc_financeiro(rows_p: list[dict]) -> dict:
     registros = []
     for row in rows_p:
@@ -425,6 +474,8 @@ def calcular_bundle_periodo(rows_p, sorteios_p):
         "blocos": calc_blocos_bundle(rows_p, sorteios_p),
         "financeiro": calc_financeiro(rows_p),
         "meus_jogos": meus_jogos_p,
+        "sorteios_raw": sorteios_p,
+        "sorteios_meta": [_meta_sorteio(r) for r in rows_p],
     }
 
 def gerar_periodos(rows, sorteios):
@@ -771,6 +822,35 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   @media (max-width: 900px) { .jogos-detail-grid { grid-template-columns: 1fr; } }
   .jogos-detail-grid canvas { max-height: 200px; }
   .jogos-detail-titulo { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 10px; }
+  /* card "Sorteios repetidos" */
+  .repet-ok { display: flex; align-items: flex-start; gap: 10px; padding: 4px 0; }
+  .repet-ok .icone { font-size: 20px; line-height: 1; }
+  .repet-ok p { margin: 0; font-size: 13px; color: var(--text); }
+  .repet-ok .prob { margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .repet-item { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; background: var(--bg3); }
+  .repet-item:last-child { margin-bottom: 0; }
+  .repet-item-titulo { font-size: 12px; font-weight: 700; color: var(--accent2); margin-bottom: 8px; }
+  .repet-numeros { font-family: monospace; font-size: 13px; color: var(--text); letter-spacing: .5px; margin-bottom: 10px; }
+  .repet-sorteio { font-size: 12px; color: var(--muted); padding: 3px 0; }
+  .repet-sorteio b { color: var(--text); }
+  /* simulador de aposta */
+  .sim-error { color: var(--red); font-size: 12px; margin: -6px 0 12px; }
+  .sim-qtd-selector { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; font-size: 13px; }
+  .sim-qtd-selector label { display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--text); }
+  .sim-qtd-selector input { accent-color: var(--accent); cursor: pointer; }
+  .sim-qtd-label { font-weight: 700; color: var(--muted); text-transform: uppercase; font-size: 11px; letter-spacing: .5px; }
+  .sim-acoes { display: flex; gap: 10px; margin-bottom: 14px; }
+  .sim-acoes button { background: var(--accent); border: none; border-radius: 6px; padding: 9px 18px; color: #fff; font-weight: 600; cursor: pointer; font-size: 13px; letter-spacing: .5px; }
+  .sim-acoes button:hover { background: #047857; }
+  .megasim-jogo { border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; background: var(--bg3); }
+  .megasim-jogo:last-child { margin-bottom: 0; }
+  .megasim-jogo-titulo { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 12px; font-family: monospace; letter-spacing: .5px; }
+  .megasim-stats { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 12px; font-size: 12px; color: var(--muted); }
+  .megasim-stats b { color: var(--text); font-size: 15px; display: block; }
+  .megasim-fin { display: flex; gap: 24px; flex-wrap: wrap; font-size: 12px; color: var(--muted); padding-top: 10px; border-top: 1px solid var(--border); }
+  .megasim-fin b { display: block; font-size: 15px; }
+  .megasim-sena { margin-top: 12px; padding: 10px 14px; border-radius: 8px; background: rgba(245,158,11,.15); border: 1px solid rgba(245,158,11,.4); color: #fbbf24; font-size: 13px; font-weight: 700; }
+  .megasim-sena div { font-weight: 400; font-size: 12px; color: var(--muted); margin-top: 4px; }
   /* seletor de período — card com grupos empilhados por tipo */
   .period-selector-wrap { padding: 14px 24px 0; position: sticky; top: 65px; z-index: 40; }
   .period-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; box-shadow: 0 4px 20px rgba(0,0,0,.25); }
@@ -797,6 +877,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .period-radio input { accent-color: var(--accent); cursor: pointer; }
   .period-nivel { animation: periodNivelIn .2s ease; }
   @keyframes periodNivelIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+  /* Melhoria 2 — Ano(s) multi-select (checkboxes) + "Ver todos os anos" */
+  .period-anos-wrap { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .period-ano-check { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 12px; color: var(--text); background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; transition: border-color .15s, color .15s; }
+  .period-ano-check:hover { border-color: var(--accent2); }
+  .period-ano-check.selecionado,
+  .period-ano-check:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .period-ano-check input { accent-color: #fff; cursor: pointer; }
+  .period-ver-todos-btn { background: transparent; border: none; color: var(--accent2); font-size: 11px; cursor: pointer; padding: 4px 0; text-decoration: underline; }
   @media (max-width: 640px) {
     .period-selector-wrap { top: 57px; padding: 10px 16px 0; }
     .period-card { padding: 12px 14px; }
@@ -804,6 +892,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     .period-row .tipo-label { width: auto; padding-top: 0; }
     .period-btn { font-size: 11px; padding: 3px 8px; }
     .period-nivel2-opcoes { gap: 12px; }
+    .period-anos-wrap { gap: 8px; }
   }
   .periodo-banner { margin: 12px 24px 0; padding: 10px 16px; background: rgba(245,158,11,.12); border: 1px solid var(--accent4); border-radius: 8px; color: #fbbf24; font-size: 13px; font-weight: 600; }
   .update-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -1037,12 +1126,49 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   </div>
 </div>
 
+<!-- Simulador de aposta -->
+<div class="grid" style="grid-template-columns: 1fr;">
+  <div class="card" id="megasim-card">
+    <h2>🎰 Simulador de aposta — Mega-Sena</h2>
+    <p style="color:var(--muted); font-size:12px; margin-bottom:14px;">
+      Informe 6 dezenas (01 a 60), separadas por espaço, vírgula, ponto, traço ou ponto-e-vírgula.
+      Simula contra o período de análise ativo no momento.
+    </p>
+
+    <label for="megasim-input" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Suas dezenas:</label>
+    <input type="text" id="megasim-input" placeholder="ex: 05 17 23 38 42 59" style="width:100%; max-width:420px; background:var(--bg3); border:1px solid var(--border); border-radius:8px; padding:10px 12px; color:var(--text); font-size:14px; margin-bottom:14px;"/>
+
+    <div class="sim-qtd-selector" id="megasim-qtd-selector">
+      <span class="sim-qtd-label">Simular</span>
+      <label><input type="radio" name="megasim-qtd" value="1" checked> 1 jogo</label>
+      <label><input type="radio" name="megasim-qtd" value="5"> 5 jogos</label>
+      <label><input type="radio" name="megasim-qtd" value="10"> 10 jogos</label>
+      <label><input type="radio" name="megasim-qtd" value="20"> 20 jogos</label>
+    </div>
+
+    <div class="sim-acoes">
+      <button id="megasim-btn" type="button">SIMULAR</button>
+    </div>
+
+    <div class="sim-error" id="megasim-error" style="display:none;"></div>
+    <div id="megasim-result"></div>
+  </div>
+</div>
+
 <!-- Meus jogos — validador financeiro -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card" id="jogos-card">
     <h2>💰 Meus jogos — validador financeiro</h2>
     <div id="jogos-resumo"></div>
     <div id="jogos-tabela-wrap" style="overflow-x:auto; margin-top:16px;"></div>
+  </div>
+</div>
+
+<!-- Sorteios repetidos — curiosidade estatística, sempre histórico completo -->
+<div class="grid" style="grid-template-columns: 1fr;">
+  <div class="card" id="repeticoes-card">
+    <h2>🔄 Sorteios repetidos</h2>
+    <div id="repeticoes-conteudo"></div>
   </div>
 </div>
 
@@ -1086,10 +1212,11 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   </div>
 </div>
 
-<!-- 4. Qual bloco mais/menos contribui por período (histórico completo) -->
-<div class="grid" style="grid-template-columns: 1fr;">
+<!-- 4. Blocos por período (histórico completo em "Todos", condensado ao
+     período ativo quando há filtro, oculto quando o filtro é 1 mês só) -->
+<div class="grid" style="grid-template-columns: 1fr;" id="blocos-mensal-wrap">
   <div class="card">
-    <h2>🗓️ Blocos por período — média mensal (histórico completo)</h2>
+    <h2 id="blocos-heatmap-titulo">🗓️ Média por mês — histórico completo</h2>
     <div id="blocos-heatmap-periodo" style="overflow-x:auto;"></div>
   </div>
 </div>
@@ -1214,6 +1341,11 @@ let hotcoldJanelaAtual = 30;
 // logo no carregamento do script.
 const IDS_MEUS_JOGOS = { resumo: 'jogos-resumo', tabelaWrap: 'jogos-tabela-wrap', prefix: 'jogo' };
 const ESTADO_ORDENACAO_JOGOS = {}; // por prefix: { coluna, direcao }
+// espelham PREMIOS_MEGA/CUSTO_JOGO_MEGA do Python — usados por
+// calcJogosFinanceiroJS quando o financeiro de "Meus jogos" precisa ser
+// recalculado no cliente (filtro multi-ano da Melhoria 2)
+const PREMIOS_REF_JS = { 4: 1106.60, 5: 55434.22 };
+const CUSTO_JOGO_JS = 5.00;
 const COLUNAS_JOGOS = [
   { key: 'idx', label: '#', ordenavel: false },
   { key: 'nome', label: 'Jogo', ordenavel: true },
@@ -1473,13 +1605,14 @@ function renderRepeticao(bundle) {
 }
 
 // ── Números quentes e frios — a janela de recência (15/30/50) e a linha de
-// base de comparação usam só os sorteios do período ativo ────────────────────
+// base de comparação usam só os sorteios do bundle ativo (bundle.sorteios_raw
+// já vem pronto — precomputado por período no Python ou mesclado em JS pra
+// múltiplos anos selecionados). ───────────────────────────────────────────────
 function renderHotCold(bundle, janela) {
   hotcoldJanelaAtual = janela;
   const grid = document.getElementById('hotcold-grid');
   grid.innerHTML = '';
-  const indicesPeriodo = obterIndicesSorteiosDoPeriodo(periodoAtualId);
-  const sorteiosPeriodo = indicesPeriodo.map(i => DATA.sorteios_raw[i]);
+  const sorteiosPeriodo = bundle.sorteios_raw || [];
   const totalPeriodo = sorteiosPeriodo.length;
   const janelaEfetiva = Math.min(janela, totalPeriodo);
   const recentes = sorteiosPeriodo.slice(-janelaEfetiva);
@@ -2034,6 +2167,114 @@ function calcRepeticaoAnteriorJS(sorteios) {
   return rep;
 }
 
+// ── funções de cálculo usadas na mesclagem client-side de múltiplos anos
+// (Melhoria 2) — espelham calc_blocos_bundle/calc_financeiro/
+// calc_jogos_financeiro_mega do Python, porque pré-computar todas as
+// combinações possíveis de anos no servidor seria inviável (2^N combinações) ─
+
+function calcBlocosJS(sorteios) {
+  const blocoDe = d => Math.floor((d - 1) / 10);
+  const nomes = ['A', 'B', 'C', 'D', 'E', 'F'];
+  const freqIndividual = {};
+  nomes.forEach((nome, i) => {
+    const inicio = i * 10 + 1;
+    freqIndividual[nome] = {};
+    for (let d = inicio; d < inicio + 10; d++) freqIndividual[nome][d] = 0;
+  });
+  sorteios.forEach(s => s.forEach(d => { freqIndividual[nomes[blocoDe(d)]][d]++; }));
+
+  function contagemBlocos(s) {
+    const c = [0, 0, 0, 0, 0, 0];
+    s.forEach(d => c[blocoDe(d)]++);
+    return c;
+  }
+  const n = sorteios.length;
+  const comboCont = new Map();
+  sorteios.forEach(s => {
+    const key = contagemBlocos(s).join('-');
+    comboCont.set(key, (comboCont.get(key) || 0) + 1);
+  });
+  const combinacoes = [...comboCont.entries()]
+    .map(([combinacao, count]) => ({ combinacao, count, pct: n ? +(count / n * 100).toFixed(1) : 0 }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 15);
+
+  const matriz = [0, 1, 2, 3, 4, 5].map(() => [0, 0, 0, 0, 0, 0]);
+  sorteios.forEach(s => {
+    const c = contagemBlocos(s);
+    const ativos = [0, 1, 2, 3, 4, 5].filter(i => c[i] >= 3);
+    ativos.forEach(i => {
+      matriz[i][i]++;
+      ativos.forEach(j => { if (i !== j) matriz[i][j]++; });
+    });
+  });
+
+  return { freq_individual: freqIndividual, combinacoes, coocorrencia: matriz };
+}
+
+function calcFinanceiroJS(sorteiosMeta) {
+  const registros = sorteiosMeta.filter(m => m.valor_premio != null);
+  const totalPremiosPagos = registros.reduce((a, r) => a + r.valor_premio * (r.ganhadores || 0), 0);
+  const mediaPremioFaixa1 = registros.length
+    ? +(registros.reduce((a, r) => a + r.valor_premio, 0) / registros.length).toFixed(2) : null;
+  const maior = registros.length ? registros.reduce((m, r) => (r.valor_premio > m.valor_premio ? r : m)) : null;
+  const menor = registros.length ? registros.reduce((m, r) => (r.valor_premio < m.valor_premio ? r : m)) : null;
+  const totalAcumulados = registros.filter(r => r.acumulado).length;
+  const resumo = r => (r ? { valor: r.valor_premio, concurso: r.concurso, data: r.data } : null);
+  const total = sorteiosMeta.length;
+  return {
+    total_premios_pagos: +totalPremiosPagos.toFixed(2),
+    media_premio_faixa1: mediaPremioFaixa1,
+    maior_premio: resumo(maior),
+    menor_premio: resumo(menor),
+    total_acumulados: totalAcumulados,
+    total_sorteios: total,
+    pct_acumulados: total ? +(totalAcumulados / total * 100).toFixed(1) : 0,
+  };
+}
+
+function calcJogosFinanceiroJS(jogosDict, sorteiosRaw, sorteiosMeta, minAcertos, maxAcertos, premiosRef, custoJogo) {
+  const n = sorteiosRaw.length;
+  const resultado = [];
+  Object.entries(jogosDict).forEach(([nome, numeros]) => {
+    const conjunto = new Set(numeros);
+    const contagem = {};
+    for (let a = minAcertos; a <= maxAcertos; a++) contagem[a] = 0;
+    const historico = [];
+    let ganho = 0;
+    const saldoEvolucao = [];
+    let acumulado = 0;
+    let melhor = { acertos: 0, concurso: null, data: null };
+    sorteiosRaw.forEach((s, i) => {
+      const acertos = s.filter(d => conjunto.has(d)).length;
+      let premio = 0;
+      const meta = sorteiosMeta[i] || {};
+      if (acertos >= minAcertos) {
+        contagem[acertos]++;
+        premio = (acertos === maxAcertos) ? (meta.valor_premio || 0) : (premiosRef[acertos] || 0);
+        historico.push({ concurso: meta.concurso, data: meta.data, acertos, premio: +premio.toFixed(2) });
+        ganho += premio;
+      }
+      if (acertos > melhor.acertos) melhor = { acertos, concurso: meta.concurso, data: meta.data };
+      acumulado += premio - custoJogo;
+      saldoEvolucao.push(+acumulado.toFixed(2));
+    });
+    const gasto = +(custoJogo * n).toFixed(2);
+    ganho = +ganho.toFixed(2);
+    const saldo = +(ganho - gasto).toFixed(2);
+    const roi = gasto ? +(saldo / gasto * 100).toFixed(1) : 0;
+    const totalPremiado = Object.values(contagem).reduce((a, b) => a + b, 0);
+    resultado.push({
+      nome, numeros: [...numeros].sort((a, b) => a - b), contagem,
+      total_premiado: totalPremiado,
+      pct_premiado: n ? +(totalPremiado / n * 100).toFixed(1) : 0,
+      gasto, ganho, saldo, roi, melhor, historico, saldo_evolucao: saldoEvolucao,
+    });
+  });
+  resultado.sort((a, b) => b.saldo - a.saldo);
+  return resultado;
+}
+
 function montarBundleFiltradoPorNumeros(sorteios, bundleBase) {
   const { distTamanho, topPorTamanho } = calcSequenciasJS(sorteios);
   return {
@@ -2057,6 +2298,7 @@ function montarBundleFiltradoPorNumeros(sorteios, bundleBase) {
     repeticao_anterior: calcRepeticaoAnteriorJS(sorteios),
     blocos: bundleBase.blocos,
     meus_jogos: bundleBase.meus_jogos,
+    sorteios_raw: sorteios,
   };
 }
 
@@ -2076,7 +2318,7 @@ function obterIndicesSorteiosDoPeriodo(periodoId) {
 function aplicarFiltroNumeros() {
   const hint = document.getElementById('numgrid-hint');
   const btnLimpar = document.getElementById('numgrid-limpar');
-  const bundleBase = resolverBundlePeriodo(periodoAtualId);
+  const bundleBase = bundleAtivo();
   if (!bundleBase) return;
   if (numerosSelecionados.size === 0) {
     btnLimpar.style.display = 'none';
@@ -2087,9 +2329,9 @@ function aplicarFiltroNumeros() {
   btnLimpar.style.display = '';
   const selecionadas = [...numerosSelecionados].sort((a, b) => a - b);
   const rotulo = selecionadas.map(n => String(n).padStart(2, '0')).join(', ');
-  const indicesPeriodo = obterIndicesSorteiosDoPeriodo(periodoAtualId);
-  const sorteiosFiltrados = indicesPeriodo
-    .map(i => DATA.sorteios_raw[i])
+  // bundleBase.sorteios_raw já vem pronto (precomputado por período no Python,
+  // ou mesclado em JS quando 2+ anos estão selecionados — ver bundleAtivo())
+  const sorteiosFiltrados = (bundleBase.sorteios_raw || DATA.sorteios_raw)
     .filter(s => selecionadas.every(n => s.includes(n)));
   if (!sorteiosFiltrados.length) {
     hint.textContent = `Dezenas ${rotulo}: nenhum sorteio encontrado com essa combinação no período atual.`;
@@ -2119,14 +2361,27 @@ function aplicarFiltroNumeros() {
 // ── função central: aplica um período a TODOS os elementos do dashboard ─────
 let periodoAtualId = '__todos__';
 let historicoInicializado = false;
+// Melhoria 2 — quando 2+ anos são selecionados no filtro multi-ano, não existe
+// um DATA.periodos[id] pré-computado pra essa combinação (2^N seria inviável
+// no Python); em vez disso o bundle é montado em JS (calcularBundleCompletoJS)
+// e guardado aqui — bundleAtivo() abstrai de onde vem o bundle corrente pros
+// consumidores (numgrid, hot/cold, simulador etc.) não precisarem saber a diferença.
+let modoMultiAno = false;
+let bundleAtualMerged = null;
 
 function resolverBundlePeriodo(periodoId) {
   return periodoId === '__todos__' ? DATA : DATA.periodos[periodoId];
 }
 
+function bundleAtivo() {
+  return modoMultiAno ? bundleAtualMerged : resolverBundlePeriodo(periodoAtualId);
+}
+
 function aplicarPeriodo(periodoId) {
   const bundle = resolverBundlePeriodo(periodoId);
   if (!bundle) return;
+  modoMultiAno = false;
+  bundleAtualMerged = null;
   periodoAtualId = periodoId;
   numerosSelecionados.clear();
   const btnLimpar = document.getElementById('numgrid-limpar');
@@ -2137,66 +2392,181 @@ function aplicarPeriodo(periodoId) {
   renderPeriodoCompleto(bundle);
   renderFinanceiro(bundle);
   renderBannerPeriodo(periodoId, bundle);
+  renderBlocosMensal(periodoId);
   aplicarFiltroPeriodoHistorico(periodoId);
 }
 
-// ── seletor de período cascateado: Ano (sempre visível) → tipo de período
-// (Ano completo/Semestre/Trimestre/Bimestre/Mês, só aparece com um ano
-// escolhido) → intervalo específico (só aparece conforme o tipo, filtrado
-// pro ano ativo). Cada nível reseta o(s) nível(is) seguinte(s) ao mudar. ────
-let periodoCascata = { ano: 'todos', tipo: 'ano', subId: null };
+// ── mesclagem client-side de múltiplos anos selecionados (Melhoria 2) ────────
+function calcularBundleCompletoJS(sorteiosRaw, sorteiosMeta) {
+  const n = sorteiosRaw.length;
+  const { distTamanho, topPorTamanho } = calcSequenciasJS(sorteiosRaw);
+  const jogosConfig = DATA.jogos_config || {};
+  return {
+    meta: {
+      total: n,
+      inicio: n ? sorteiosMeta[0].data : null,
+      fim: n ? sorteiosMeta[n - 1].data : null,
+    },
+    frequencia: calcFrequenciaJS(sorteiosRaw),
+    atraso: calcAtrasoJS(sorteiosRaw),
+    pares_impares: calcParesImparesJS(sorteiosRaw),
+    faixas: calcFaixasJS(sorteiosRaw),
+    somas: calcSomaJS(sorteiosRaw),
+    seq_dist_tamanho: distTamanho,
+    seq_top_por_tamanho: topPorTamanho,
+    coocorrencia: calcCoocorrenciaJS(sorteiosRaw, 20),
+    anticorrelacao: calcAntiCorrelacaoJS(sorteiosRaw, 15),
+    tendencia: calcTendenciaJS(sorteiosRaw),
+    ciclo_medio: calcCicloMedioJS(sorteiosRaw),
+    repeticao_anterior: calcRepeticaoAnteriorJS(sorteiosRaw),
+    blocos: calcBlocosJS(sorteiosRaw),
+    financeiro: calcFinanceiroJS(sorteiosMeta),
+    meus_jogos: Object.keys(jogosConfig).length ? calcJogosFinanceiroJS(jogosConfig, sorteiosRaw, sorteiosMeta, 4, 6, PREMIOS_REF_JS, CUSTO_JOGO_JS) : null,
+    sorteios_raw: sorteiosRaw,
+    sorteios_meta: sorteiosMeta,
+  };
+}
+
+function renderBannerPeriodoMulti(anos, bundle) {
+  const banner = document.getElementById('periodo-banner');
+  const label = [...anos].sort().join(' + ');
+  banner.textContent = `⚡ Exibindo: ${label} · ${bundle.meta.total} sorteios`;
+  banner.style.display = 'block';
+}
+
+function aplicarFiltroPeriodoHistoricoMulti(anos) {
+  if (!historicoInicializado) return;
+  const anosSet = new Set(anos);
+  const raiz = document.getElementById('historico-arvore');
+  raiz.querySelectorAll('.hist-mes').forEach(mesDiv => {
+    mesDiv.classList.toggle('hist-fora-periodo', !anosSet.has(mesDiv.dataset.ano));
+  });
+  raiz.querySelectorAll('.hist-ano').forEach(anoDiv => {
+    const algumMesVisivel = [...anoDiv.querySelectorAll('.hist-mes')]
+      .some(mesDiv => !mesDiv.classList.contains('hist-fora-periodo'));
+    anoDiv.classList.toggle('hist-fora-periodo', !algumMesVisivel);
+  });
+}
+
+function aplicarPeriodoMultiAno(anos) {
+  // funde sorteios_raw + sorteios_meta dos anos selecionados (cada
+  // DATA.periodos[ano] já vem com os dois, precomputados no Python), ordena
+  // por concurso pra manter a ordem cronológica (tendência depende disso) e
+  // recalcula tudo no cliente com as mesmas funções calc*JS da grade interativa.
+  const pares = [];
+  anos.forEach(ano => {
+    const p = DATA.periodos[ano];
+    if (!p) return;
+    p.sorteios_raw.forEach((s, i) => pares.push([s, p.sorteios_meta[i]]));
+  });
+  pares.sort((a, b) => a[1].concurso - b[1].concurso);
+  const sorteiosRaw = pares.map(x => x[0]);
+  const sorteiosMeta = pares.map(x => x[1]);
+
+  modoMultiAno = true;
+  periodoAtualId = 'MULTI:' + [...anos].sort().join(',');
+  bundleAtualMerged = calcularBundleCompletoJS(sorteiosRaw, sorteiosMeta);
+
+  numerosSelecionados.clear();
+  const btnLimpar = document.getElementById('numgrid-limpar');
+  const hint = document.getElementById('numgrid-hint');
+  if (btnLimpar) btnLimpar.style.display = 'none';
+  if (hint) hint.textContent = 'Clique em uma ou mais dezenas para filtrar todos os gráficos abaixo pela combinação escolhida.';
+  renderNumGrid(bundleAtualMerged);
+  renderPeriodoCompleto(bundleAtualMerged);
+  renderFinanceiro(bundleAtualMerged);
+  renderBannerPeriodoMulti(anos, bundleAtualMerged);
+  renderBlocosMensalMulti(anos);
+  aplicarFiltroPeriodoHistoricoMulti(anos);
+}
+
+// ── seletor de período cascateado: Ano(s) — multi-select (sempre visível) →
+// tipo de período (Ano completo/Semestre/Trimestre/Bimestre/Mês, só aparece
+// com EXATAMENTE 1 ano selecionado) → intervalo específico. 0 anos = "Todos
+// os dados"; 2+ anos = mescla os anos selecionados (sem subdivisão). Trocar a
+// seleção de anos sempre reseta os níveis seguintes pro padrão. ─────────────
+let periodoCascata = { anos: new Set(), tipo: 'ano', subId: null };
+let mostrarTodosAnos = false; // "Ver todos os anos" — relevante quando há muitos (Mega-Sena tem ~30)
 const MESES_LABEL_CASCATA = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const TIPOS_NIVEL2 = [
   ['ano', 'Ano completo'], ['semestre', 'Semestre'], ['trimestre', 'Trimestre'],
   ['bimestre', 'Bimestre'], ['mes', 'Mês'],
 ];
 const PREFIXO_TIPO = { semestre: 'S', trimestre: 'T', bimestre: 'B', mes: 'M' };
+const LIMITE_ANOS_SEM_EXPANDIR = 10;
+const QTD_ANOS_RECENTES_PADRAO = 5;
 
 function periodoFinalDaCascata() {
-  if (periodoCascata.ano === 'todos') return '__todos__';
-  if (periodoCascata.tipo === 'ano') return periodoCascata.ano;
-  return periodoCascata.subId || periodoCascata.ano;
+  if (periodoCascata.anos.size === 0) return '__todos__';
+  const ano = [...periodoCascata.anos][0];
+  if (periodoCascata.tipo === 'ano') return ano;
+  return periodoCascata.subId || ano;
+}
+
+function toggleAnoSelecionado(ano) {
+  if (periodoCascata.anos.has(ano)) periodoCascata.anos.delete(ano);
+  else periodoCascata.anos.add(ano);
+  periodoCascata.tipo = 'ano';
+  periodoCascata.subId = null;
+  renderSeletorCascata();
 }
 
 function renderSeletorCascata() {
   const container = document.getElementById('period-selector');
   const todosBtn = document.getElementById('period-todos-btn');
   container.innerHTML = '';
-  todosBtn.classList.toggle('active', periodoCascata.ano === 'todos');
+  todosBtn.classList.toggle('active', periodoCascata.anos.size === 0);
 
   const disponiveis = DATA.periodos_disponiveis || [];
-  const anos = [...new Set(disponiveis.filter(p => p.tipo === 'ano').map(p => p.id))].sort();
+  const anos = [...new Set(disponiveis.filter(p => p.tipo === 'ano').map(p => p.id))].sort().reverse();
 
-  // Nível 1 — Ano, sempre visível
+  // Nível 1 — Ano(s), multi-select, sempre visível
   const linhaAno = document.createElement('div');
   linhaAno.className = 'period-row';
   const labelAno = document.createElement('span');
   labelAno.className = 'tipo-label';
-  labelAno.textContent = 'Ano:';
+  labelAno.textContent = 'Ano(s):';
   linhaAno.appendChild(labelAno);
-  const scrollAno = document.createElement('div');
-  scrollAno.className = 'period-row-scroll';
-  anos.forEach(ano => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'period-btn' + (periodoCascata.ano === ano ? ' active' : '');
-    btn.textContent = ano;
-    btn.dataset.ano = ano;
-    btn.addEventListener('click', () => {
-      periodoCascata = { ano, tipo: 'ano', subId: null };
-      renderSeletorCascata();
-    });
-    scrollAno.appendChild(btn);
+
+  const wrapAnos = document.createElement('div');
+  wrapAnos.className = 'period-anos-wrap';
+  const precisaExpandir = anos.length > LIMITE_ANOS_SEM_EXPANDIR;
+  const anosVisiveis = (precisaExpandir && !mostrarTodosAnos) ? anos.slice(0, QTD_ANOS_RECENTES_PADRAO) : anos;
+  anosVisiveis.forEach(ano => {
+    const lbl = document.createElement('label');
+    lbl.className = 'period-ano-check' + (periodoCascata.anos.has(ano) ? ' selecionado' : '');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = periodoCascata.anos.has(ano);
+    input.addEventListener('change', () => toggleAnoSelecionado(ano));
+    lbl.appendChild(input);
+    lbl.appendChild(document.createTextNode(ano));
+    wrapAnos.appendChild(lbl);
   });
-  linhaAno.appendChild(scrollAno);
+  if (precisaExpandir) {
+    const btnVerTodos = document.createElement('button');
+    btnVerTodos.type = 'button';
+    btnVerTodos.className = 'period-ver-todos-btn';
+    btnVerTodos.textContent = mostrarTodosAnos ? '▲ Ver menos anos' : `▼ Ver todos os anos (${anos.length})`;
+    btnVerTodos.addEventListener('click', () => { mostrarTodosAnos = !mostrarTodosAnos; renderSeletorCascata(); });
+    wrapAnos.appendChild(btnVerTodos);
+  }
+  linhaAno.appendChild(wrapAnos);
   container.appendChild(linhaAno);
 
-  if (periodoCascata.ano === 'todos') {
+  if (periodoCascata.anos.size === 0) {
     aplicarPeriodo('__todos__');
     return;
   }
 
-  // Nível 2 — tipo de período (radio), só aparece com um ano específico ativo
+  if (periodoCascata.anos.size > 1) {
+    aplicarPeriodoMultiAno([...periodoCascata.anos]);
+    return;
+  }
+
+  const anoUnico = [...periodoCascata.anos][0];
+
+  // Nível 2 — tipo de período (radio), só aparece com exatamente 1 ano ativo
   const linhaTipo = document.createElement('div');
   linhaTipo.className = 'period-row period-nivel';
   const labelTipo = document.createElement('span');
@@ -2225,7 +2595,7 @@ function renderSeletorCascata() {
   container.appendChild(linhaTipo);
 
   if (periodoCascata.tipo === 'ano') {
-    aplicarPeriodo(periodoCascata.ano);
+    aplicarPeriodo(anoUnico);
     return;
   }
 
@@ -2242,10 +2612,10 @@ function renderSeletorCascata() {
   if (periodoCascata.tipo === 'mes') {
     // mostra os 12 meses sempre — desabilita em cinza os que não têm dados
     const idsExistentes = new Set(
-      disponiveis.filter(p => p.tipo === 'mes' && p.id.startsWith(periodoCascata.ano + '-M')).map(p => p.id)
+      disponiveis.filter(p => p.tipo === 'mes' && p.id.startsWith(anoUnico + '-M')).map(p => p.id)
     );
     for (let m = 1; m <= 12; m++) {
-      const id = `${periodoCascata.ano}-M${String(m).padStart(2, '0')}`;
+      const id = `${anoUnico}-M${String(m).padStart(2, '0')}`;
       const existe = idsExistentes.has(id);
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -2264,7 +2634,7 @@ function renderSeletorCascata() {
   } else {
     const prefixo = PREFIXO_TIPO[periodoCascata.tipo];
     const opcoes = disponiveis
-      .filter(p => p.tipo === periodoCascata.tipo && p.id.startsWith(periodoCascata.ano + '-' + prefixo))
+      .filter(p => p.tipo === periodoCascata.tipo && p.id.startsWith(anoUnico + '-' + prefixo))
       .sort((a, b) => a.id.localeCompare(b.id));
     if (!periodoCascata.subId || !opcoes.some(p => p.id === periodoCascata.subId)) {
       periodoCascata.subId = opcoes.length ? opcoes[0].id : null;
@@ -2287,11 +2657,139 @@ function renderSeletorCascata() {
 }
 
 document.getElementById('period-todos-btn').addEventListener('click', () => {
-  periodoCascata = { ano: 'todos', tipo: 'ano', subId: null };
+  periodoCascata = { anos: new Set(), tipo: 'ano', subId: null };
   renderSeletorCascata();
 });
 
 renderSeletorCascata();
+
+// ── Simulador de aposta — Mega-Sena (client-side, respeita o período ativo) ──
+// Prêmios de referência fixos (quadra/quina) — sena não tem valor fixo (varia
+// muito por concurso, e o histórico não traz o valor por concurso pontuado
+// nessa simulação ad-hoc), então só é sinalizada, não somada no ganho.
+const MEGASIM_PREMIOS = { 4: 1106.60, 5: 55434.22 };
+const MEGASIM_CUSTO = 5.00;
+
+function megasimFormatarMoeda(v) {
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function megasimParsearEntrada(texto) {
+  return texto.split(/[\s,.\-;]+/).map(s => s.trim()).filter(Boolean).map(Number);
+}
+
+function megasimValidar(texto) {
+  const numeros = megasimParsearEntrada(texto);
+  const validos = numeros.filter(n => Number.isInteger(n) && n >= 1 && n <= 60);
+  const unicos = new Set(validos);
+  if (validos.length !== numeros.length || unicos.size !== 6 || validos.length !== 6) {
+    return null;
+  }
+  return [...unicos].sort((a, b) => a - b);
+}
+
+function megasimGerarVariacao(base) {
+  // troca 1-2 dezenas da base por "vizinhos" (±1..±3) ainda dentro de 01-60,
+  // tentando algumas vezes até achar uma combinação de 6 únicos e distinta da base
+  for (let tentativa = 0; tentativa < 30; tentativa++) {
+    const jogo = new Set(base);
+    const nTrocas = 1 + Math.floor(Math.random() * 2); // 1 ou 2
+    const baseArr = [...base];
+    for (let t = 0; t < nTrocas; t++) {
+      const idx = Math.floor(Math.random() * baseArr.length);
+      const original = baseArr[idx];
+      const delta = (Math.floor(Math.random() * 3) + 1) * (Math.random() < 0.5 ? -1 : 1);
+      let vizinho = original + delta;
+      if (vizinho < 1) vizinho = 1 + (1 - vizinho);
+      if (vizinho > 60) vizinho = 60 - (vizinho - 60);
+      if (!jogo.has(vizinho)) { jogo.delete(original); jogo.add(vizinho); }
+    }
+    if (jogo.size === 6) {
+      const arr = [...jogo].sort((a, b) => a - b);
+      if (arr.join(',') !== base.join(',')) return arr;
+    }
+  }
+  return base; // não conseguiu gerar variação distinta — devolve a base mesmo
+}
+
+function megasimSimularJogo(numeros, sorteiosRaw, sorteiosMeta) {
+  const aposta = new Set(numeros);
+  const pontos = { 4: 0, 5: 0, 6: 0 };
+  const senas = [];
+  sorteiosRaw.forEach((s, i) => {
+    const acertos = s.filter(d => aposta.has(d)).length;
+    if (acertos >= 4) {
+      pontos[acertos] = (pontos[acertos] || 0) + 1;
+      if (acertos === 6 && sorteiosMeta[i]) senas.push(sorteiosMeta[i]);
+    }
+  });
+  const total = sorteiosRaw.length;
+  const custo = MEGASIM_CUSTO * total;
+  const ganho = pontos[4] * MEGASIM_PREMIOS[4] + pontos[5] * MEGASIM_PREMIOS[5];
+  const saldo = ganho - custo;
+  const roi = custo ? (saldo / custo * 100) : 0;
+  return { numeros, pontos, senas, total, custo, ganho, saldo, roi };
+}
+
+function megasimRenderResultado(resultados) {
+  const el = document.getElementById('megasim-result');
+  el.innerHTML = '';
+  resultados.forEach((r, i) => {
+    const card = document.createElement('div');
+    card.className = 'megasim-jogo';
+    const dezenasTxt = r.numeros.map(n => String(n).padStart(2, '0')).join(' · ');
+    let senaHtml = '';
+    if (r.pontos[6] > 0) {
+      const lista = r.senas.map(s => `Concurso ${s.concurso} (${s.data})`).join(', ');
+      senaHtml = `<div class="megasim-sena">🏆 ACERTOU A SENA!<div>${lista}</div></div>`;
+    }
+    card.innerHTML = `
+      <div class="megasim-jogo-titulo">Jogo ${i + 1}: ${dezenasTxt}</div>
+      <div class="megasim-stats">
+        <div>Quadras (4 acertos)<b>${r.pontos[4]}</b></div>
+        <div>Quinas (5 acertos)<b>${r.pontos[5]}</b></div>
+        <div>Senas (6 acertos)<b>${r.pontos[6]}</b></div>
+        <div>Sorteios analisados<b>${r.total}</b></div>
+      </div>
+      <div class="megasim-fin">
+        <div>Custo total<b>${megasimFormatarMoeda(r.custo)}</b></div>
+        <div>Ganho estimado<b>${megasimFormatarMoeda(r.ganho)}</b></div>
+        <div>Saldo estimado<b class="${r.saldo >= 0 ? 'money-pos' : 'money-neg'}">${megasimFormatarMoeda(r.saldo)}</b></div>
+        <div>ROI<b class="${r.roi >= 0 ? 'money-pos' : 'money-neg'}">${(r.roi >= 0 ? '+' : '') + r.roi.toFixed(1)}%</b></div>
+      </div>
+      ${senaHtml}`;
+    el.appendChild(card);
+  });
+}
+
+{
+  const input = document.getElementById('megasim-input');
+  const btn = document.getElementById('megasim-btn');
+  const errEl = document.getElementById('megasim-error');
+  const resultEl = document.getElementById('megasim-result');
+
+  btn.addEventListener('click', () => {
+    const base = megasimValidar(input.value);
+    errEl.style.display = 'none';
+    resultEl.innerHTML = '';
+    if (!base) {
+      errEl.textContent = 'Informe exatamente 6 números entre 01 e 60';
+      errEl.style.display = 'block';
+      return;
+    }
+    const bundle = bundleAtivo() || DATA;
+    const sorteiosRaw = bundle.sorteios_raw || DATA.sorteios_raw;
+    const sorteiosMeta = bundle.sorteios_meta || DATA.sorteios_meta || [];
+    const qtdEl = document.querySelector('input[name="megasim-qtd"]:checked');
+    const qtd = qtdEl ? +qtdEl.value : 1;
+
+    const jogos = [base];
+    for (let i = 1; i < qtd; i++) jogos.push(megasimGerarVariacao(base));
+
+    const resultados = jogos.map(j => megasimSimularJogo(j, sorteiosRaw, sorteiosMeta));
+    megasimRenderResultado(resultados);
+  });
+}
 
 // ── abas de página: Visão Geral / Blocos / Histórico ─────────────────────────
 {
@@ -2312,32 +2810,106 @@ renderSeletorCascata();
   });
 }
 
-// ── Blocos por período (heatmap — sempre histórico completo) ─────────────────
-{
+// ── Blocos por período (heatmap mensal — Melhoria 4: histórico completo só em
+// "Todos"; condensado aos meses do período ativo quando há filtro de ano/
+// semestre/trimestre/bimestre; oculto quando o filtro já é 1 mês só) ─────────
+function anoDoPeriodo(periodoId) {
+  if (periodoId === '__todos__') return null;
+  return periodoId.split('-')[0];
+}
+function ehPeriodoMesUnico(periodoId) {
+  return /-M\d{2}$/.test(periodoId);
+}
+function desenharTabelaBlocosMensal(dados) {
   const el = document.getElementById('blocos-heatmap-periodo');
-  const dados = DATA.blocos_periodo || [];
   const nomes = ['A','B','C','D','E','F'];
+  el.innerHTML = '';
   if (!dados.length) {
     el.innerHTML = '<p style="color:var(--muted)">Sem dados.</p>';
-  } else {
-    const todasMedias = dados.flatMap(d => d.medias);
-    const minV = Math.min(...todasMedias), maxV = Math.max(...todasMedias);
-    const table = document.createElement('table');
-    table.innerHTML = `<thead><tr><th>Mês</th>${nomes.map(n => `<th>${n}</th>`).join('')}</tr></thead>`;
-    const tbody = document.createElement('tbody');
-    dados.forEach(d => {
-      const tr = document.createElement('tr');
-      let celulas = `<td style="color:var(--muted)">${d.periodo}</td>`;
-      d.medias.forEach(v => {
-        const t = maxV > minV ? (v - minV) / (maxV - minV) : 0;
-        const r = Math.round(6 + t * 30), g = Math.round(78 + t * 133), b = Math.round(59 + t * 90);
-        celulas += `<td style="background:rgba(${r},${g},${b},.35); text-align:center;">${v}</td>`;
-      });
-      tr.innerHTML = celulas;
-      tbody.appendChild(tr);
+    return;
+  }
+  const todasMedias = dados.flatMap(d => d.medias);
+  const minV = Math.min(...todasMedias), maxV = Math.max(...todasMedias);
+  const table = document.createElement('table');
+  table.innerHTML = `<thead><tr><th>Mês</th>${nomes.map(n => `<th>${n}</th>`).join('')}</tr></thead>`;
+  const tbody = document.createElement('tbody');
+  dados.forEach(d => {
+    const tr = document.createElement('tr');
+    let celulas = `<td style="color:var(--muted)">${d.periodo}</td>`;
+    d.medias.forEach(v => {
+      const t = maxV > minV ? (v - minV) / (maxV - minV) : 0;
+      const r = Math.round(6 + t * 30), g = Math.round(78 + t * 133), b = Math.round(59 + t * 90);
+      celulas += `<td style="background:rgba(${r},${g},${b},.35); text-align:center;">${v}</td>`;
     });
-    table.appendChild(tbody);
-    el.appendChild(table);
+    tr.innerHTML = celulas;
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  el.appendChild(table);
+}
+
+function renderBlocosMensal(periodoId) {
+  const wrap = document.getElementById('blocos-mensal-wrap');
+  const tituloEl = document.getElementById('blocos-heatmap-titulo');
+
+  if (ehPeriodoMesUnico(periodoId)) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = '';
+
+  let dados = DATA.blocos_periodo || [];
+  let titulo = '🗓️ Média por mês — histórico completo';
+  if (periodoId !== '__todos__') {
+    const ano = anoDoPeriodo(periodoId);
+    dados = dados.filter(d => d.periodo.startsWith(ano + '-'));
+    titulo = '🗓️ Blocos no período selecionado';
+  }
+  tituloEl.textContent = titulo;
+  desenharTabelaBlocosMensal(dados);
+}
+
+function renderBlocosMensalMulti(anos) {
+  const wrap = document.getElementById('blocos-mensal-wrap');
+  const tituloEl = document.getElementById('blocos-heatmap-titulo');
+  wrap.style.display = '';
+  const anosSet = new Set(anos);
+  const dados = (DATA.blocos_periodo || []).filter(d => anosSet.has(d.periodo.split('-')[0]));
+  tituloEl.textContent = '🗓️ Blocos no período selecionado';
+  desenharTabelaBlocosMensal(dados);
+}
+
+// ── Sorteios repetidos (curiosidade — sempre histórico completo) ─────────────
+{
+  const el = document.getElementById('repeticoes-conteudo');
+  const reps = DATA.repeticoes || [];
+  const prob = DATA.prob_repeticao_pct;
+  const totalComb = DATA.total_combinacoes;
+  const probTxt = totalComb
+    ? `A probabilidade de pelo menos 1 repetição depois de ${DATA.meta.total} sorteios é de aproximadamente ${prob}% (1 em ${totalComb.toLocaleString('pt-BR')} combinações possíveis).`
+    : '';
+  if (!reps.length) {
+    el.innerHTML = `
+      <div class="repet-ok">
+        <span class="icone">✅</span>
+        <div>
+          <p>Nenhum sorteio idêntico encontrado em ${DATA.meta.total} concursos analisados.</p>
+          <p class="prob">${probTxt}</p>
+        </div>
+      </div>`;
+  } else {
+    let html = `<p style="color:var(--muted); font-size:12px; margin-bottom:14px;">${reps.length} ocorrência${reps.length === 1 ? '' : 's'} encontrada${reps.length === 1 ? '' : 's'}. ${probTxt}</p>`;
+    reps.forEach((rep, i) => {
+      const dezenasTxt = rep.numeros.map(n => String(n).padStart(2, '0')).join(' · ');
+      const sorteiosHtml = rep.sorteios.map(s => `<div class="repet-sorteio">→ Concurso <b>${s.concurso}</b> (${s.data})</div>`).join('');
+      html += `
+        <div class="repet-item">
+          <div class="repet-item-titulo">Ocorrência ${i + 1} — sorteado ${rep.vezes}x</div>
+          <div class="repet-numeros">${dezenasTxt}</div>
+          ${sorteiosHtml}
+        </div>`;
+    });
+    el.innerHTML = html;
   }
 }
 
@@ -2859,6 +3431,8 @@ def gerar_html(rows: list[dict], output: str, fonte_supabase: dict | None = None
     historico = calc_historico(rows, sorteios)
     financeiro = calc_financeiro(rows)
     meus_jogos = calc_jogos_financeiro_mega(JOGOS_MEGA, rows, sorteios) if JOGOS_MEGA else None
+    repeticoes = detectar_repeticoes(rows)
+    prob_repeticao_pct = prob_repeticao(n, TOTAL_COMBINACOES)
 
     data = {
         "meta": {
@@ -2885,7 +3459,7 @@ def gerar_html(rows: list[dict], output: str, fonte_supabase: dict | None = None
         "ciclo_medio": ciclo_medio,
         "anticorrelacao": [[[a, b], c] for (a, b), c in anticorrelacao],
         "sorteios_raw": sorteios,
-        "sorteios_meta": [{"concurso": r["concurso"], "data": r["data"]} for r in rows],
+        "sorteios_meta": [_meta_sorteio(r) for r in rows],
         "blocos": blocos,
         "blocos_periodo": blocos_periodo,
         "periodos": periodos,
@@ -2893,6 +3467,13 @@ def gerar_html(rows: list[dict], output: str, fonte_supabase: dict | None = None
         "historico": historico,
         "financeiro": financeiro,
         "meus_jogos": meus_jogos,
+        "repeticoes": repeticoes,
+        "prob_repeticao_pct": prob_repeticao_pct,
+        "total_combinacoes": TOTAL_COMBINACOES,
+        # dict de jogos cru (não por período) — usado pelo JS pra recalcular o
+        # card financeiro de "Meus jogos" quando 2+ anos são selecionados no
+        # filtro multi-ano (Melhoria 2)
+        "jogos_config": JOGOS_MEGA or {},
     }
 
     from datetime import datetime
