@@ -55,8 +55,14 @@ CREATE TABLE IF NOT EXISTS lotomania_sorteios (
 # faixas 2-6 (19/18/17/16/15 acertos) — adicionadas depois do schema
 # original, mesmo motivo da faixa 7 (surpresa): todos os prêmios da
 # Lotomania são variáveis (rateio por sorteio), nunca fixos.
-NOME_FAIXA = {2: "dezenove", 3: "dezoito", 4: "dezessete", 5: "dezesseis", 6: "quinze"}
-COLUNAS_FAIXAS_SECUNDARIAS = [c for nome in NOME_FAIXA.values() for c in (f"valor_{nome}", f"ganhadores_{nome}")]
+# faixa 6 NÃO está aqui de propósito — seu significado depende da época
+# (ver montar_linha: "0 acertos" antes de 29/04/2016, "15 acertos" depois),
+# então é identificada por descricaoFaixa, não pelo número.
+NOME_FAIXA = {2: "dezenove", 3: "dezoito", 4: "dezessete", 5: "dezesseis"}
+COLUNAS_FAIXAS_SECUNDARIAS = [
+    c for nome in list(NOME_FAIXA.values()) + ["quinze"]
+    for c in (f"valor_{nome}", f"ganhadores_{nome}")
+]
 
 COLUNAS = (
     ["concurso", "data", "data_br", "acumulado", "valor_premio", "ganhadores"]
@@ -74,11 +80,18 @@ def data_br_para_iso(data_br: str) -> str:
 def montar_linha(data_api: dict) -> dict:
     """Converte o JSON retornado pela API da Caixa (endpoint /lotomania/{n})
     para o formato de linha do banco. Faixa 1 = "vinte" (20 acertos, prêmio
-    maior). Faixas 2-6 = dezenove/dezoito/dezessete/dezesseis/quinze. A
-    Lotomania tem uma 7ª faixa única no Brasil, "surpresa" (0 acertos) —
-    confirmado via API real que ela é sempre listaRateioPremio com faixa=7 e
-    descricaoFaixa="0 acertos", então usamos o número da faixa (estável) em
-    vez de casar a descrição por texto. TODOS os prêmios da Lotomania são
+    maior); faixas 2-5 (posição estável em qualquer época) =
+    dezenove/dezoito/dezessete/dezesseis.
+
+    IMPORTANTE — a faixa de 15 acertos ("quinze") só foi criada em 29/04/2016
+    (concurso 1653): confirmado via API real que concursos ≤1652 têm apenas
+    6 faixas no total (1=20, 2=19, 3=18, 4=17, 5=16, 6=0 acertos/"surpresa"),
+    enquanto concursos ≥1653 têm 7 (a faixa 6 vira "15 acertos" e "surpresa"
+    passa a ser a 7ª). Usar o NÚMERO da faixa pra identificar surpresa/quinze
+    (como se fazia antes) mistura os dois: em sorteios antigos, o prêmio real
+    da faixa "0 acertos" acabava salvo em valor_quinze por engano. Por isso
+    essas duas faixas são identificadas pela descricaoFaixa (texto estável
+    nas duas épocas), não pelo número. TODOS os prêmios da Lotomania são
     variáveis (rateio por sorteio) — nenhuma faixa usa valor fixo."""
     dezenas = sorted(int(d) for d in (data_api.get("listaDezenas") or []))
     data_br = data_api.get("dataApuracao")
@@ -90,12 +103,16 @@ def montar_linha(data_api: dict) -> dict:
     secundarias = {}
     for faixa in data_api.get("listaRateioPremio") or []:
         n = faixa.get("faixa")
+        desc = (faixa.get("descricaoFaixa") or "").strip().lower()
         if n == 1:
             valor_premio = faixa.get("valorPremio")
             ganhadores = faixa.get("numeroDeGanhadores")
-        elif n == 7:
+        elif desc.startswith("0 acerto"):
             valor_surpresa = faixa.get("valorPremio")
             ganhadores_surpresa = faixa.get("numeroDeGanhadores")
+        elif desc.startswith("15 acerto"):
+            secundarias["valor_quinze"] = faixa.get("valorPremio")
+            secundarias["ganhadores_quinze"] = faixa.get("numeroDeGanhadores")
         elif n in NOME_FAIXA:
             nome = NOME_FAIXA[n]
             secundarias[f"valor_{nome}"] = faixa.get("valorPremio")

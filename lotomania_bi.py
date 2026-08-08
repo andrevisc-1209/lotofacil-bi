@@ -516,7 +516,12 @@ def calc_jogos_lotomania(jogos_dict, rows_p, sorteios_p):
         for row, s in zip(rows_p, sorteios_p):
             acertos = len(conjunto & set(s))
             premio = 0.0
-            if acertos in FAIXA_LOTOMANIA:
+            # a faixa "quinze" só existe a partir do concurso 1653 (29/04/2016)
+            # — em sorteios anteriores valor_quinze é NULL porque a faixa
+            # simplesmente não existia, não porque ninguém ganhou; usar isso
+            # como sinal em vez de um número de concurso fixo no código.
+            existe_faixa = acertos != 15 or row.get("valor_quinze") is not None
+            if acertos in FAIXA_LOTOMANIA and existe_faixa:
                 faixa = FAIXA_LOTOMANIA[acertos]
                 contagem[acertos] += 1
                 premio = _to_float(row.get(faixa["campo_valor"])) or 0.0
@@ -1415,6 +1420,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card" id="jogos-header-card">
     <h2>🎯 Meus Jogos — Lotomania</h2>
+    <p style="color:var(--text-3); font-size:11px; margin:-4px 0 12px;">
+      ℹ️ A faixa de 15 acertos só existe a partir do concurso 1.653 (29/04/2016) — confirmado via API real da Caixa. Sorteios anteriores a essa data não tinham essa faixa, então acertar 15 dezenas neles não é contado como premiação aqui.
+    </p>
     <div id="jogos-resumo"></div>
   </div>
 </div>
@@ -2617,7 +2625,11 @@ function calcJogosLotomaniaJS(jogosDict, sorteiosRaw, sorteiosMeta) {
       const acertos = s.filter(d => conjunto.has(d)).length;
       let premio = 0;
       const meta = sorteiosMeta[i] || {};
-      if (acertos in contagem) {
+      // faixa "quinze" só existe a partir do concurso 1653 (29/04/2016) —
+      // valor_quinze null/undefined em sorteios antigos significa que a
+      // faixa não existia, não que ninguém ganhou (ver montar_linha no Python)
+      const existeFaixa = acertos !== 15 || (meta.valor_quinze !== undefined && meta.valor_quinze !== null);
+      if (acertos in contagem && existeFaixa) {
         contagem[acertos]++;
         const campo = CAMPO_VALOR_FAIXA_LOTOMANIA_JS[acertos];
         premio = meta[campo] || 0;
@@ -3261,7 +3273,9 @@ function validarJogoTextoLotomania(texto) {
     sorteiosRaw.forEach((s, i) => {
       const acertos = s.filter(d => aposta.has(d)).length;
       const meta = sorteiosMeta[i];
-      if (acertos in pontos) {
+      // faixa "quinze" só existe a partir do concurso 1653 (29/04/2016)
+      const existeFaixa = acertos !== 15 || (meta && meta.valor_quinze !== undefined && meta.valor_quinze !== null);
+      if (acertos in pontos && existeFaixa) {
         pontos[acertos]++;
         if (meta) {
           const campo = CAMPO_VALOR_FAIXA_LOTOMANIA_JS[acertos];
