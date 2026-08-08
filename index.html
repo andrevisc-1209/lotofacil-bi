@@ -6,73 +6,107 @@
 <title>Loterias BI</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+  :root {
+    --bg0: #0a0a0f;
+    --bg1: #111118;
+    --bg2: #1a1a24;
+    --bg3: #22222f;
+    --text: #e8e8f0;
+    --text-2: #a0a0b8;
+    --text-3: #606078;
+    --border: #2a2a3a;
+    --border-2: #3a3a4f;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 20px;
+
+    --accent-lotofacil: #7c6af7; --accent-lotofacil-2: #9d8fff;
+    --accent-megasena:  #10b981; --accent-megasena-2:  #34d399;
+    --accent-lotomania: #d97706; --accent-lotomania-2: #fbbf24;
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     min-height: 100vh;
     display: flex; align-items: center; justify-content: center;
-    background: radial-gradient(ellipse 1200px 800px at 15% -10%, #211b45 0%, transparent 60%),
-                radial-gradient(ellipse 900px 700px at 100% 10%, #0f3d2e 0%, transparent 55%),
-                #08090f;
-    color: #f1f0f5;
-    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    background: radial-gradient(ellipse 1200px 800px at 15% -10%, #1c1730 0%, transparent 60%),
+                radial-gradient(ellipse 900px 700px at 100% 10%, #0f2b24 0%, transparent 55%),
+                var(--bg0);
+    color: var(--text);
+    font-family: var(--font);
     padding: 24px;
   }
-  .wrap { width: 100%; max-width: 780px; text-align: center; }
-  h1 { font-size: 30px; font-weight: 800; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 12px; }
-  .sub { color: #6b7280; font-size: 14px; margin-bottom: 40px; }
-  .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+  .wrap { width: 100%; max-width: 820px; text-align: center; }
+  h1 { font-size: 30px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 12px; letter-spacing: -0.02em; }
+  .sub { color: var(--text-3); font-size: 14px; margin-bottom: 40px; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
   @media (max-width: 900px) { .cards { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
-  a.card {
-    display: block; text-decoration: none; color: inherit;
-    background: #0f1018; border: 1px solid rgba(255,255,255,0.06); border-radius: 20px;
-    padding: 36px 24px; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
-    box-shadow: 0 4px 24px rgba(0,0,0,.3);
+
+  a.menu-card {
+    display: flex; flex-direction: column; gap: 8px;
+    text-decoration: none; color: inherit; text-align: left;
+    background: var(--bg1); border: 1px solid var(--border); border-radius: var(--r-xl);
+    padding: 28px 24px;
+    transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+    box-shadow: var(--shadow);
   }
-  a.card:hover { transform: translateY(-4px); box-shadow: 0 12px 36px rgba(0,0,0,.4); }
-  a.card.lotofacil:hover { border-color: rgba(124,58,237,.5); box-shadow: 0 12px 36px rgba(124,58,237,.15); }
-  a.card.megasena:hover { border-color: rgba(5,150,105,.5); box-shadow: 0 12px 36px rgba(5,150,105,.15); }
-  a.card.lotomania:hover { border-color: rgba(217,119,6,.5); box-shadow: 0 12px 36px rgba(217,119,6,.15); }
-  .card-icon { font-size: 44px; margin-bottom: 14px; }
-  .card-titulo { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
-  .card-sub { color: #6b7280; font-size: 13px; margin-bottom: 20px; }
-  .card-cta {
-    display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700;
-    padding: 9px 18px; border-radius: 8px; color: #fff;
+  a.menu-card:hover { transform: translateY(-3px); }
+  a.menu-card.lotofacil:hover { border-color: var(--accent-lotofacil); box-shadow: 0 8px 32px rgba(124,106,247,.18); }
+  a.menu-card.megasena:hover  { border-color: var(--accent-megasena);  box-shadow: 0 8px 32px rgba(16,185,129,.18); }
+  a.menu-card.lotomania:hover { border-color: var(--accent-lotomania); box-shadow: 0 8px 32px rgba(217,119,6,.18); }
+
+  .menu-card-icon { font-size: 32px; }
+  .menu-card-title { font-size: 19px; font-weight: 700; color: var(--text); }
+  .menu-card-count {
+    font-size: 22px; font-weight: 700; font-family: var(--font-mono); line-height: 1.1;
   }
-  .lotofacil .card-cta { background: #7c3aed; }
-  .megasena .card-cta { background: #059669; }
-  .lotomania .card-cta { background: #d97706; }
-  footer { margin-top: 40px; color: #6b7280; font-size: 11px; }
+  .lotofacil .menu-card-count { color: var(--accent-lotofacil-2); }
+  .megasena  .menu-card-count { color: var(--accent-megasena-2); }
+  .lotomania .menu-card-count { color: var(--accent-lotomania-2); }
+  .menu-card-sub { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: .06em; margin-top: -4px; }
+
+  .menu-card-btn {
+    margin-top: 14px; padding: 9px 16px; border-radius: var(--r-md);
+    font-size: 13px; font-weight: 600; text-align: center; color: #fff;
+  }
+  .lotofacil .menu-card-btn { background: var(--accent-lotofacil); }
+  .megasena  .menu-card-btn { background: var(--accent-megasena); }
+  .lotomania .menu-card-btn { background: var(--accent-lotomania); }
+
+  footer { margin-top: 36px; color: var(--text-3); font-size: 11px; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>🎰 Loterias BI</h1>
-  <div class="sub">Análise estatística dos sorteios — dados oficiais da Caixa</div>
+  <div class="sub">Análise estatística · Histórico completo — dados oficiais da Caixa</div>
   <div class="cards">
-    <a class="card lotofacil" href="lotofacil.html">
-      <div class="card-icon">🍀</div>
-      <div class="card-titulo">Lotofácil</div>
-      <div class="card-sub" id="menu-total-lotofacil">— sorteios</div>
-      <span class="card-cta">Abrir →</span>
+    <a class="menu-card lotofacil" href="lotofacil.html">
+      <div class="menu-card-icon">🍀</div>
+      <div class="menu-card-title">Lotofácil</div>
+      <div class="menu-card-count" id="menu-total-lotofacil">— sorteios</div>
+      <div class="menu-card-sub">Histórico completo</div>
+      <span class="menu-card-btn">Abrir BI →</span>
     </a>
-    <a class="card megasena" href="megasena.html">
-      <div class="card-icon">💰</div>
-      <div class="card-titulo">Mega-Sena</div>
-      <div class="card-sub" id="menu-total-megasena">— sorteios</div>
-      <span class="card-cta">Abrir →</span>
+    <a class="menu-card megasena" href="megasena.html">
+      <div class="menu-card-icon">💰</div>
+      <div class="menu-card-title">Mega-Sena</div>
+      <div class="menu-card-count" id="menu-total-megasena">— sorteios</div>
+      <div class="menu-card-sub">Histórico completo</div>
+      <span class="menu-card-btn">Abrir BI →</span>
     </a>
-    <a class="card lotomania" href="lotomania.html">
-      <div class="card-icon">🎯</div>
-      <div class="card-titulo">Lotomania</div>
-      <div class="card-sub" id="menu-total-lotomania">— sorteios</div>
-      <span class="card-cta">Abrir →</span>
+    <a class="menu-card lotomania" href="lotomania.html">
+      <div class="menu-card-icon">🎯</div>
+      <div class="menu-card-title">Lotomania</div>
+      <div class="menu-card-count" id="menu-total-lotomania">— sorteios</div>
+      <div class="menu-card-sub">Histórico completo</div>
+      <span class="menu-card-btn">Abrir BI →</span>
     </a>
   </div>
-  <footer>Dados: API oficial Caixa Econômica Federal</footer>
+  <footer>Dados atualizados automaticamente pela Caixa</footer>
 </div>
 <script>
 const SUPABASE_URL = 'https://rlkxckpybhtmtiznsmod.supabase.co';

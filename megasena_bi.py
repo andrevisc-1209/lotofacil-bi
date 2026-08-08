@@ -593,23 +593,42 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <title>Mega-Sena BI — {titulo}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root {
-    --bg: #08090f;
+    /* base surface tokens (new) */
+    --bg0: #0a0a0f;
+    --bg1: #111118;
     --bg2: #0f1018;
     --bg3: #161824;
-    --border: rgba(255,255,255,0.06);
-    --accent: #059669;
+    --text: #e8e8f0;
+    --text-2: #a0a0b8;
+    --text-3: #606078;
+    --border: #2a2a3a;
+    --border-2: #3a3a4f;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 20px;
+
+    /* Mega-Sena accent — green (this dashboard's identity color) */
+    --accent: #10b981;
     --accent2: #34d399;
-    --neon: rgba(5,150,105,0.15);
-    --text: #f1f0f5;
-    --muted: #6b7280;
-    --green: #10b981;
+    --accent3-green: #047857;
+    --neon: rgba(16,185,129,0.15);
+
+    /* status colors */
+    --green: #22c55e;
     --red: #ef4444;
     --gold: #f59e0b;
-    --card: var(--bg2);
+    --yellow: #f59e0b;
+    --blue: #3b82f6;
+
+    /* back-compat aliases — hundreds of existing rules use these old names */
+    --bg: var(--bg0);
+    --card: var(--bg1);
+    --muted: var(--text-3);
     --accent3: var(--green);
     --accent4: var(--gold);
     --accent5: var(--red);
@@ -622,7 +641,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 var(--bg);
     background-attachment: fixed;
     color: var(--text);
-    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    font-family: var(--font);
     font-size: 14px;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
@@ -707,12 +726,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     .gh-modal-acoes button { width: 100%; margin-right: 0 !important; }
   }
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; padding: 24px 24px 0; }
-  .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; box-shadow: 0 4px 24px rgba(0,0,0,.25); transition: transform .15s, box-shadow .15s; }
+  .kpi { background: var(--bg1); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 20px 24px; box-shadow: var(--shadow); transition: transform .15s, box-shadow .15s; }
   .kpi:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,.35); }
   .kpi .kpi-icon { font-size: 18px; margin-bottom: 6px; display: block; opacity: .9; }
-  .kpi .label { color: var(--muted); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .5px; line-height: 1.4; }
-  .kpi .value { font-size: 36px; font-weight: 700; margin-top: 4px; color: var(--accent2); line-height: 1.15; }
-  .kpi .sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .kpi .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); font-weight: 500; line-height: 1.4; }
+  .kpi .value { font-size: 28px; font-weight: 700; margin-top: 4px; color: var(--text); font-family: var(--font-mono); line-height: 1.1; }
+  .kpi .sub { font-size: 12px; color: var(--text-2); margin-top: 4px; }
   @media (max-width: 640px) {
     .kpis { grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 16px 16px 0; }
     .kpi { padding: 14px; border-radius: 12px; }
@@ -725,14 +744,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .grid-31 { grid-template-columns: 1fr 1.4fr; }
   @media (max-width: 1024px) { .grid-3 { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 640px) { .grid-2, .grid-3, .grid-13, .grid-31 { grid-template-columns: 1fr; } .grid { gap: 14px; padding: 16px; } }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; box-shadow: 0 4px 24px rgba(0,0,0,.3); transition: border-color .2s ease, box-shadow .2s ease; }
-  .card:hover { border-color: rgba(5,150,105,.3); box-shadow: 0 4px 24px rgba(0,0,0,.3), 0 0 0 1px rgba(5,150,105,.08); }
-  .card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .card { background: var(--bg1); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 20px 24px; box-shadow: var(--shadow); transition: border-color .2s ease, box-shadow .2s ease; }
+  .card:hover { border-color: rgba(16,185,129,.3); box-shadow: var(--shadow), 0 0 0 1px rgba(16,185,129,.08); }
+  .card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
   @media (max-width: 640px) { .card { padding: 16px; border-radius: 12px; } }
   .page-content { animation: pageFadeIn .25s ease; }
   @keyframes pageFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
   canvas { max-height: 280px; }
-  .heatcell { border-radius: 10px; padding: 14px 4px; text-align: center; font-weight: 800; font-size: 16px; transition: transform .15s; cursor: default; }
+  .heatcell { border-radius: 10px; padding: 14px 4px; text-align: center; font-weight: 800; font-size: 16px; font-family: var(--font-mono); transition: transform .15s; cursor: default; }
   .heatcell:hover { transform: scale(1.12); z-index: 2; position: relative; }
   .heatcell .freq { font-size: 11px; font-weight: 500; opacity: .8; display: block; margin-top: 3px; }
   @media (max-width: 640px) {
@@ -743,10 +762,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .numgrid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; max-width: 620px; margin: 0 auto; }
   .numgrid-cell {
     aspect-ratio: 1; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 12px; color: #fff; cursor: pointer; border: 2px solid transparent;
+    font-weight: 800; font-size: 12px; font-family: var(--font-mono); color: #fff; cursor: pointer; border: 2px solid transparent;
     transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
   }
-  .numgrid-cell:hover { transform: scale(1.1); }
+  .numgrid-cell:hover { transform: scale(1.1); box-shadow: 0 4px 16px rgba(16,185,129,0.3); }
   .numgrid-cell.selecionada { border-color: var(--accent2); box-shadow: 0 0 0 4px var(--neon), 0 0 18px rgba(52,211,153,.55); transform: scale(1.06); }
   .numgrid-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
   .numgrid-hint { font-size: 12px; color: var(--muted); flex: 1 1 260px; }
@@ -761,17 +780,18 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .tab-content { display: none; }
   .tab-content.active { display: block; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { text-align: left; color: var(--muted); font-weight: 700; font-size: 11px; text-transform: uppercase; padding: 10px 8px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--card); z-index: 1; }
-  td { padding: 9px 8px; border-bottom: 1px solid #1e2130; }
+  th { padding: 10px 14px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); font-weight: 600; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--card); z-index: 1; }
+  td { padding: 10px 14px; color: var(--text-2); font-family: var(--font-mono); font-size: 12px; border-bottom: 1px solid var(--border); }
+  .jogos-tabela td:nth-child(2) { font-family: var(--font); color: var(--text); }
   tbody tr:nth-child(even) td { background: rgba(255,255,255,.025); }
-  tbody tr:hover td { background: rgba(5,150,105,.07); }
+  tr:hover td { background: var(--bg2); }
   tr:last-child td { border-bottom: none; }
   @media (max-width: 640px) { table { font-size: 12px; } td, th { padding: 7px 6px; } }
   .badge { display: inline-flex; align-items: center; gap: 3px; background: #1e2130; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: 700; }
   .badge.up { color: var(--green); }
   .badge.down { color: var(--red); }
   .badge.flat { color: var(--muted); }
-  .seq-tag { display: inline-block; background: #10321f; border: 1px solid #1c5c3a; color: var(--accent2); border-radius: 4px; padding: 2px 7px; font-weight: 700; font-size: 12px; margin-right: 3px; }
+  .seq-tag { display: inline-block; background: var(--bg3); border: 1px solid var(--border-2); color: var(--accent2); border-radius: var(--r-sm); padding: 2px 7px; font-weight: 600; font-size: 12px; margin-right: 3px; font-family: var(--font-mono); }
   .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
   .bar-row .label { width: 90px; font-size: 12px; color: var(--muted); text-align: right; flex-shrink: 0; }
   .bar-row .bar { height: 18px; border-radius: 4px; background: var(--accent); min-width: 4px; transition: width .4s; }
@@ -865,20 +885,20 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .megasim-sena div { font-weight: 400; font-size: 12px; color: var(--muted); margin-top: 4px; }
   /* seletor de período — card com grupos empilhados por tipo */
   .period-selector-wrap { padding: 14px 24px 0; position: sticky; top: 65px; z-index: 40; }
-  .period-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; box-shadow: 0 4px 20px rgba(0,0,0,.25); }
+  .period-card { background: var(--bg1); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 20px 24px; box-shadow: var(--shadow); }
   .period-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-  .period-card-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+  .period-card-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); }
   .period-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
   .period-row:last-child { margin-bottom: 0; }
   .period-row .tipo-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; width: 90px; flex-shrink: 0; padding-top: 5px; }
   .period-row-scroll { display: flex; gap: 6px; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; -ms-overflow-style: none; padding-bottom: 2px; }
   .period-row-scroll::-webkit-scrollbar { display: none; }
   .period-btn {
-    background: var(--bg3); border: 1px solid var(--border); border-radius: 6px;
-    padding: 4px 10px; font-size: 12px; color: var(--text); cursor: pointer;
-    flex-shrink: 0; white-space: nowrap; transition: background .15s, border-color .15s, color .15s;
+    background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r-sm);
+    padding: 5px 12px; font-size: 12px; color: var(--text-2); cursor: pointer;
+    flex-shrink: 0; white-space: nowrap; transition: all .15s;
   }
-  .period-btn:hover { border-color: var(--accent2); }
+  .period-btn:hover { border-color: var(--accent2); color: var(--accent2); }
   .period-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
   .period-btn:disabled { opacity: .35; cursor: not-allowed; }
   .period-btn:disabled:hover { border-color: var(--border); }
@@ -891,8 +911,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   @keyframes periodNivelIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
   /* Melhoria 2 — Ano(s) multi-select (checkboxes) + "Ver todos os anos" */
   .period-anos-wrap { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-  .period-ano-check { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 12px; color: var(--text); background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; transition: border-color .15s, color .15s; }
-  .period-ano-check:hover { border-color: var(--accent2); }
+  .period-ano-check { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 12px; color: var(--text-2); background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 5px 12px; transition: all .15s; }
+  .period-ano-check:hover { border-color: var(--accent2); color: var(--accent2); }
   .period-ano-check.selecionado,
   .period-ano-check:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff; }
   .period-ano-check input { accent-color: #fff; cursor: pointer; }
@@ -906,7 +926,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     .period-nivel2-opcoes { gap: 12px; }
     .period-anos-wrap { gap: 8px; }
   }
-  .periodo-banner { margin: 12px 24px 0; padding: 10px 16px; background: rgba(245,158,11,.12); border: 1px solid var(--accent4); border-radius: 8px; color: #fbbf24; font-size: 13px; font-weight: 600; }
+  .periodo-banner { margin: 12px 24px 0; padding: 8px 14px; border-radius: var(--r-sm); font-size: 12px; font-weight: 600; }
+  /* banner "período ativo" (⚡ Exibindo: ...) — verde, na identidade do dashboard */
+  #periodo-banner { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); color: var(--accent2); }
+  /* #update-banner reaproveita a caixa .periodo-banner mas é um aviso de
+     atualização disponível (semântica distinta) — mantém o dourado original */
+  #update-banner { background: rgba(245,158,11,.12); border: 1px solid var(--accent4); color: #fbbf24; }
   .update-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .update-banner button { background: #f59e0b; border: none; border-radius: 8px; min-height: 36px; padding: 0 16px; color: #1a1300; font-weight: 700; cursor: pointer; font-size: 12px; flex-shrink: 0; transition: background .15s, transform .1s; }
   .update-banner button:hover { background: #fbbf24; }
@@ -956,7 +981,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .hist-detail-inner { padding: 10px 12px 14px; }
   .hist-detail-titulo { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
   .hist-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-  .hist-badge { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; background: #10321f; border: 1px solid #1c5c3a; color: #fff; font-weight: 700; font-size: 12px; }
+  .hist-badge { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: var(--bg3); border: 1px solid var(--border-2); font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--text); margin: 2px; }
   .hist-detail-meta { display: flex; gap: 20px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
   .hist-detail-meta b { color: var(--text); }
 </style>
@@ -1375,22 +1400,55 @@ const COLUNAS_JOGOS = [
   { key: 'melhor', label: 'Melhor resultado', ordenavel: false },
 ];
 
+// ── paleta de calor percentil (8 tons, cinza → verde → dourado) — usada pela
+// grade interativa de números e por qualquer outro heatmap por frequência do
+// dashboard, para evitar a interpolação linear RGB antiga (muito saturada) ──
+const HEAT_STOPS = [
+  { bg: '#1a1a24', fg: '#404058' },
+  { bg: '#132a22', fg: '#10b981' },
+  { bg: '#153a2c', fg: '#34d399' },
+  { bg: '#1a4a36', fg: '#5eead4' },
+  { bg: '#215a40', fg: '#86efac' },
+  { bg: '#2c6e4a', fg: '#bbf7d0' },
+  { bg: '#c4973a', fg: '#fff8e8' },
+  { bg: '#d4a830', fg: '#fff9e0' },
+];
+function stopFor(p) {
+  if (p >= 0.90) return HEAT_STOPS[7];
+  if (p >= 0.70) return HEAT_STOPS[6];
+  if (p >= 0.55) return HEAT_STOPS[5];
+  if (p >= 0.40) return HEAT_STOPS[4];
+  if (p >= 0.25) return HEAT_STOPS[3];
+  if (p >= 0.10) return HEAT_STOPS[2];
+  if (p > 0)     return HEAT_STOPS[1];
+  return HEAT_STOPS[0];
+}
+// calcula o rank percentil (0-1) de cada valor de um objeto/array de contagens
+function rankPercentis(valoresPorChave) {
+  const entradas = Object.entries(valoresPorChave).map(([k, c]) => ({ k, c }));
+  const ordenado = [...entradas].sort((a, b) => a.c - b.c);
+  return new Map(ordenado.map((e, i) => [e.k, ordenado.length > 1 ? i / (ordenado.length - 1) : 0]));
+}
+
 function renderNumGrid(bundle) {
   const grid = document.getElementById('numgrid');
   grid.innerHTML = '';
   const freq = bundle.frequencia;
-  const vals = Object.values(freq);
-  const minV = Math.min(...vals), maxV = Math.max(...vals);
+  const entradas = Object.entries(freq).map(([d, c]) => ({ d: +d, c }));
+  const ordenado = [...entradas].sort((a, b) => a.c - b.c);
+  const rank = new Map(ordenado.map((e, i) => [e.d, i / Math.max(1, ordenado.length - 1)]));
   for (let d = 1; d <= 60; d++) {
     const cnt = freq[d] || 0;
-    const t = maxV > minV ? (cnt - minV) / (maxV - minV) : 0;
-    const r = Math.round(6 + t * 30), g = Math.round(78 + t * 133), b = Math.round(59 + t * 90);
+    const p = rank.get(d) ?? 0;
+    const { bg, fg } = stopFor(p);
     const cell = document.createElement('div');
     cell.className = 'numgrid-cell' + (numerosSelecionados.has(d) ? ' selecionada' : '');
     cell.dataset.num = String(d);
-    cell.style.background = `rgb(${r},${g},${b})`;
+    cell.style.background = bg;
+    cell.style.color = fg;
     cell.textContent = String(d).padStart(2, '0');
-    cell.title = `Dezena ${String(d).padStart(2,'0')}: ${cnt} vezes (${bundle.meta.total ? (cnt/bundle.meta.total*100).toFixed(1) : '0.0'}%)`;
+    const pct = bundle.meta.total ? (cnt/bundle.meta.total*100).toFixed(1) : '0.0';
+    cell.title = `Dezena ${String(d).padStart(2,'0')}: ${cnt} vezes (${pct}%)`;
     grid.appendChild(cell);
   }
 }
@@ -1754,7 +1812,10 @@ function renderBlocos(bundle) {
     const wrap = document.getElementById('blocos-coocorrencia');
     wrap.innerHTML = '';
     const vals = b.coocorrencia.flat();
-    const minV = Math.min(...vals), maxV = Math.max(...vals);
+    const ordenado = [...vals].sort((a, b2) => a - b2);
+    // posição da primeira ocorrência de v no array ordenado (busca linear é
+    // suficiente aqui: no máximo 36 células no bloco 6×6)
+    const percentilDoValor = (v) => ordenado.length > 1 ? ordenado.indexOf(v) / (ordenado.length - 1) : 0;
     wrap.appendChild(document.createElement('div'));
     nomes.forEach(n => {
       const h = document.createElement('div');
@@ -1769,12 +1830,13 @@ function renderBlocos(bundle) {
       wrap.appendChild(h);
       nomes.forEach((nomeCol, j) => {
         const cnt = b.coocorrencia[i][j];
-        const t = maxV > minV ? (cnt - minV) / (maxV - minV) : 0;
-        const r = Math.round(6 + t * 30), g = Math.round(78 + t * 133), bch = Math.round(59 + t * 90);
+        const p = percentilDoValor(cnt);
+        const { bg, fg } = stopFor(p);
         const cell = document.createElement('div');
         cell.className = 'heatcell';
-        cell.style.background = `rgb(${r},${g},${bch})`;
-        cell.style.color = t > 0.4 ? '#fff' : '#ccc';
+        cell.style.background = bg;
+        cell.style.color = fg;
+        cell.style.fontFamily = 'var(--font-mono)';
         cell.style.fontSize = '12px';
         cell.textContent = cnt;
         cell.title = i === j
@@ -2848,7 +2910,8 @@ function desenharTabelaBlocosMensal(dados) {
     return;
   }
   const todasMedias = dados.flatMap(d => d.medias);
-  const minV = Math.min(...todasMedias), maxV = Math.max(...todasMedias);
+  const ordenado = [...todasMedias].sort((a, b) => a - b);
+  const percentilDaMedia = (v) => ordenado.length > 1 ? ordenado.indexOf(v) / (ordenado.length - 1) : 0;
   const table = document.createElement('table');
   table.innerHTML = `<thead><tr><th>Mês</th>${nomes.map(n => `<th>${n}</th>`).join('')}</tr></thead>`;
   const tbody = document.createElement('tbody');
@@ -2856,9 +2919,9 @@ function desenharTabelaBlocosMensal(dados) {
     const tr = document.createElement('tr');
     let celulas = `<td style="color:var(--muted)">${d.periodo}</td>`;
     d.medias.forEach(v => {
-      const t = maxV > minV ? (v - minV) / (maxV - minV) : 0;
-      const r = Math.round(6 + t * 30), g = Math.round(78 + t * 133), b = Math.round(59 + t * 90);
-      celulas += `<td style="background:rgba(${r},${g},${b},.35); text-align:center;">${v}</td>`;
+      const p = percentilDaMedia(v);
+      const { bg, fg } = stopFor(p);
+      celulas += `<td style="background:${bg}; color:${fg}; font-family:var(--font-mono); text-align:center;">${v}</td>`;
     });
     tr.innerHTML = celulas;
     tbody.appendChild(tr);

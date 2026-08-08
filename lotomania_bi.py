@@ -715,23 +715,42 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <title>Lotomania BI — {titulo}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root {
-    --bg: #08090f;
-    --bg2: #0f1018;
-    --bg3: #161824;
-    --border: rgba(255,255,255,0.06);
+    /* base surface tokens (new) */
+    --bg0: #0a0a0f;
+    --bg1: #111118;
+    --bg2: #1a1a24;
+    --bg3: #22222f;
+    --text-2: #a0a0b8;
+    --text-3: #6b7280;
+    --border-2: #3a3a4f;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 20px;
+
+    /* Lotomania accent — âmbar/laranja (cor de identidade deste dashboard) */
     --accent: #d97706;
     --accent2: #fbbf24;
+    --accent3-amber: #b45309;
     --neon: rgba(217,119,6,0.15);
+
+    /* status colors */
+    --border: rgba(255,255,255,0.06);
     --text: #f1f0f5;
-    --muted: #6b7280;
-    --green: #10b981;
+    --green: #22c55e;
     --red: #ef4444;
     --gold: #f59e0b;
-    --card: var(--bg2);
+    --yellow: #f59e0b;
+    --blue: #3b82f6;
+
+    /* aliases de compatibilidade — NÃO REMOVER, dezenas de regras existentes usam estes nomes */
+    --bg: var(--bg0);
+    --muted: var(--text-3);
+    --card: var(--bg1);
     --accent3: var(--green);
     --accent4: var(--gold);
     --accent5: var(--red);
@@ -744,7 +763,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
                 var(--bg);
     background-attachment: fixed;
     color: var(--text);
-    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    font-family: var(--font);
     font-size: 14px;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
@@ -829,12 +848,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     .gh-modal-acoes button { width: 100%; margin-right: 0 !important; }
   }
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; padding: 24px 24px 0; }
-  .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; box-shadow: 0 4px 24px rgba(0,0,0,.25); transition: transform .15s, box-shadow .15s; }
+  .kpi { background: var(--bg1); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 20px 24px; box-shadow: var(--shadow); transition: transform .15s, box-shadow .15s; }
   .kpi:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,.35); }
   .kpi .kpi-icon { font-size: 18px; margin-bottom: 6px; display: block; opacity: .9; }
-  .kpi .label { color: var(--muted); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .5px; line-height: 1.4; }
-  .kpi .value { font-size: 36px; font-weight: 700; margin-top: 4px; color: var(--accent2); line-height: 1.15; }
-  .kpi .sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .kpi .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); font-weight: 500; line-height: 1.4; }
+  .kpi .value { font-size: 28px; font-weight: 700; margin-top: 4px; color: var(--text); font-family: var(--font-mono); line-height: 1.1; }
+  .kpi .sub { font-size: 12px; color: var(--text-2); margin-top: 4px; }
   @media (max-width: 640px) {
     .kpis { grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 16px 16px 0; }
     .kpi { padding: 14px; border-radius: 12px; }
@@ -847,9 +866,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .grid-31 { grid-template-columns: 1fr 1.4fr; }
   @media (max-width: 1024px) { .grid-3 { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 640px) { .grid-2, .grid-3, .grid-13, .grid-31 { grid-template-columns: 1fr; } .grid { gap: 14px; padding: 16px; } }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; box-shadow: 0 4px 24px rgba(0,0,0,.3); transition: border-color .2s ease, box-shadow .2s ease; }
-  .card:hover { border-color: rgba(217,119,6,.3); box-shadow: 0 4px 24px rgba(0,0,0,.3), 0 0 0 1px rgba(217,119,6,.08); }
-  .card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .card { background: var(--bg1); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 20px 24px; box-shadow: var(--shadow); transition: border-color .2s ease, box-shadow .2s ease; }
+  .card:hover { border-color: rgba(217,119,6,.3); box-shadow: var(--shadow), 0 0 0 1px rgba(217,119,6,.08); }
+  .card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
   @media (max-width: 640px) { .card { padding: 16px; border-radius: 12px; } }
   .page-content { animation: pageFadeIn .25s ease; }
   @keyframes pageFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
@@ -868,7 +887,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     font-weight: 800; font-size: 11px; color: #fff; cursor: pointer; border: 2px solid transparent;
     transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
   }
-  .numgrid-cell:hover { transform: scale(1.1); }
+  .numgrid-cell:hover { transform: scale(1.1); box-shadow: 0 4px 16px rgba(217,119,6,0.3); }
   .numgrid-cell.selecionada { border-color: var(--accent2); box-shadow: 0 0 0 4px var(--neon), 0 0 18px rgba(251,191,36,.55); transform: scale(1.06); }
   .numgrid-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
   .numgrid-hint { font-size: 12px; color: var(--muted); flex: 1 1 260px; }
@@ -883,17 +902,18 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .tab-content { display: none; }
   .tab-content.active { display: block; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { text-align: left; color: var(--muted); font-weight: 700; font-size: 11px; text-transform: uppercase; padding: 10px 8px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--card); z-index: 1; }
-  td { padding: 9px 8px; border-bottom: 1px solid #1e2130; }
+  th { text-align: left; color: var(--text-3); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; padding: 10px 14px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg1); z-index: 1; }
+  td { padding: 10px 14px; color: var(--text-2); font-family: var(--font-mono); font-size: 12px; border-bottom: 1px solid var(--border); }
+  .jogos-tabela td:nth-child(2), .jogos-tabela th:nth-child(2) { font-family: var(--font); }
   tbody tr:nth-child(even) td { background: rgba(255,255,255,.025); }
-  tbody tr:hover td { background: rgba(217,119,6,.07); }
+  tbody tr:hover td { background: var(--bg2); }
   tr:last-child td { border-bottom: none; }
   @media (max-width: 640px) { table { font-size: 12px; } td, th { padding: 7px 6px; } }
   .badge { display: inline-flex; align-items: center; gap: 3px; background: #1e2130; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: 700; }
   .badge.up { color: var(--green); }
   .badge.down { color: var(--red); }
   .badge.flat { color: var(--muted); }
-  .seq-tag { display: inline-block; background: #3d2a0f; border: 1px solid #7a4a0f; color: var(--accent2); border-radius: 4px; padding: 2px 7px; font-weight: 700; font-size: 12px; margin-right: 3px; }
+  .seq-tag { display: inline-block; background: var(--bg3); border: 1px solid var(--border-2); color: var(--accent2); border-radius: var(--r-sm); padding: 2px 7px; font-weight: 600; font-size: 12px; margin-right: 3px; font-family: var(--font-mono); }
   .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
   .bar-row .label { width: 90px; font-size: 12px; color: var(--muted); text-align: right; flex-shrink: 0; }
   .bar-row .bar { height: 18px; border-radius: 4px; background: var(--accent); min-width: 4px; transition: width .4s; }
@@ -913,18 +933,18 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   @media (max-width: 1200px) { .blocos-grid { grid-template-columns: repeat(3, 1fr); } }
   @media (max-width: 900px) { .blocos-grid { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 560px) { .blocos-grid { grid-template-columns: 1fr; } }
-  .bloco-card { background: #10131c; border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .bloco-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-md); padding: 14px; }
   .bloco-card h3 { font-size: 12px; font-weight: 700; color: var(--accent2); margin-bottom: 12px; text-transform: uppercase; letter-spacing: .5px; }
   .bloco-rank-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 11px; }
   .bloco-rank-row .medalha { width: 14px; flex-shrink: 0; text-align: center; font-size: 12px; }
-  .bloco-num { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; background: #0f1117; border: 1px solid var(--border); font-weight: 700; font-size: 11px; flex-shrink: 0; }
-  .bloco-num.top { background: linear-gradient(135deg,#f59e0b,#fbbf24); color: #1a1300; border-color: #f59e0b; }
+  .bloco-num { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: var(--r-sm); background: var(--bg0); border: 1px solid var(--border); font-weight: 700; font-size: 11px; flex-shrink: 0; font-family: var(--font-mono); }
+  .bloco-num.top { background: linear-gradient(135deg,var(--gold),var(--accent2)); color: #1a1300; border-color: var(--gold); }
   .bloco-num.bottom { background: rgba(239,68,68,.15); color: #fca5a5; border-color: rgba(239,68,68,.5); }
-  .bloco-bar-wrap { flex: 1; background: #0f1117; border-radius: 4px; height: 12px; overflow: hidden; }
+  .bloco-bar-wrap { flex: 1; background: var(--bg0); border-radius: 4px; height: 12px; overflow: hidden; }
   .bloco-bar { height: 100%; background: var(--accent); border-radius: 4px; }
-  .bloco-rank-row.top .bloco-bar { background: linear-gradient(90deg,#f59e0b,#fbbf24); }
+  .bloco-rank-row.top .bloco-bar { background: linear-gradient(90deg,var(--gold),var(--accent2)); }
   .bloco-rank-row.bottom .bloco-bar { background: rgba(239,68,68,.6); }
-  .bloco-rank-row .contagem { width: 82px; text-align: right; color: var(--muted); flex-shrink: 0; }
+  .bloco-rank-row .contagem { width: 82px; text-align: right; color: var(--text-3); flex-shrink: 0; font-family: var(--font-mono); }
   .window-btns { display: flex; gap: 6px; margin-bottom: 14px; }
   .hotcold-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px; margin-top: 4px; }
   .hotcold-card { border-radius: 8px; padding: 10px 6px; text-align: center; border: 1px solid var(--border); background: #1e2130; }
@@ -953,20 +973,20 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .repet-sorteio b { color: var(--text); }
   /* seletor de período — card com grupos empilhados por tipo */
   .period-selector-wrap { padding: 14px 24px 0; position: sticky; top: 65px; z-index: 40; }
-  .period-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; box-shadow: 0 4px 20px rgba(0,0,0,.25); }
+  .period-card { background: var(--bg1); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 20px 24px; box-shadow: var(--shadow); }
   .period-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-  .period-card-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+  .period-card-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); font-weight: 600; }
   .period-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
   .period-row:last-child { margin-bottom: 0; }
   .period-row .tipo-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; width: 90px; flex-shrink: 0; padding-top: 5px; }
   .period-row-scroll { display: flex; gap: 6px; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; -ms-overflow-style: none; padding-bottom: 2px; }
   .period-row-scroll::-webkit-scrollbar { display: none; }
   .period-btn {
-    background: var(--bg3); border: 1px solid var(--border); border-radius: 6px;
-    padding: 4px 10px; font-size: 12px; color: var(--text); cursor: pointer;
-    flex-shrink: 0; white-space: nowrap; transition: background .15s, border-color .15s, color .15s;
+    background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r-sm);
+    padding: 5px 12px; font-size: 12px; color: var(--text-2); cursor: pointer;
+    flex-shrink: 0; white-space: nowrap; transition: all .15s;
   }
-  .period-btn:hover { border-color: var(--accent2); }
+  .period-btn:hover { border-color: var(--accent2); color: var(--accent2); }
   .period-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
   .period-btn:disabled { opacity: .35; cursor: not-allowed; }
   .period-btn:disabled:hover { border-color: var(--border); }
@@ -979,8 +999,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   @keyframes periodNivelIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
   /* Ano(s) multi-select (checkboxes) + "Ver todos os anos" */
   .period-anos-wrap { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-  .period-ano-check { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 12px; color: var(--text); background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; transition: border-color .15s, color .15s; }
-  .period-ano-check:hover { border-color: var(--accent2); }
+  .period-ano-check { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 12px; color: var(--text-2); background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 5px 12px; transition: all .15s; }
+  .period-ano-check:hover { border-color: var(--accent2); color: var(--accent2); }
   .period-ano-check.selecionado,
   .period-ano-check:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff; }
   .period-ano-check input { accent-color: #fff; cursor: pointer; }
@@ -994,69 +1014,69 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     .period-nivel2-opcoes { gap: 12px; }
     .period-anos-wrap { gap: 8px; }
   }
-  .periodo-banner { margin: 12px 24px 0; padding: 10px 16px; background: rgba(245,158,11,.12); border: 1px solid var(--accent4); border-radius: 8px; color: #fbbf24; font-size: 13px; font-weight: 600; }
+  .periodo-banner { margin: 12px 24px 0; padding: 8px 14px; background: rgba(217,119,6,0.08); border: 1px solid rgba(217,119,6,0.2); border-radius: var(--r-sm); color: var(--accent2); font-size: 12px; font-weight: 600; }
   .update-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .update-banner button { background: #f59e0b; border: none; border-radius: 8px; min-height: 36px; padding: 0 16px; color: #1a1300; font-weight: 700; cursor: pointer; font-size: 12px; flex-shrink: 0; transition: background .15s, transform .1s; }
   .update-banner button:hover { background: #fbbf24; }
   .update-banner button:active { transform: scale(.97); }
   .fin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
-  .fin-item { background: #10131c; border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
-  .fin-item .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
-  .fin-item .value { font-size: 18px; font-weight: 700; color: var(--accent2); }
-  .fin-item .sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .fin-item { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-md); padding: 14px; }
+  .fin-item .label { color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+  .fin-item .value { font-size: 18px; font-weight: 700; color: var(--accent2); font-family: var(--font-mono); }
+  .fin-item .sub { font-size: 11px; color: var(--text-2); margin-top: 4px; }
   /* Meus Jogos — tabela comparativa */
   .jogos-resumo-titulo { font-size: 14px; font-weight: 700; color: var(--accent2); margin-bottom: 10px; }
   .jogos-tabela th[data-col] { cursor: pointer; user-select: none; white-space: nowrap; }
   .jogos-tabela th[data-col]:hover { color: var(--text); }
   .jogos-tabela th .sort-arrow { display: inline-block; width: 10px; opacity: .6; }
   .jogos-row { cursor: pointer; }
-  .jogos-row.saldo-pos td { background: rgba(16,185,129,.06); }
-  .jogos-row.saldo-neg td { background: rgba(239,68,68,.06); }
+  .jogos-row.saldo-pos td { background: rgba(34,197,94,.04); }
+  .jogos-row.saldo-neg td { background: rgba(239,68,68,.04); }
   .jogos-row:hover td { filter: brightness(1.15); }
-  .jogos-row .jogos-dezenas { font-family: monospace; font-size: 11px; color: var(--muted); }
-  .jogos-detail-row td { padding: 0; border-bottom: 1px solid #1e2130; }
+  .jogos-row .jogos-dezenas { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
+  .jogos-detail-row td { padding: 0; border-bottom: 1px solid var(--border); }
   .jogos-detail-inner { max-height: 0; overflow: hidden; transition: max-height .25s ease; padding: 0 16px; }
   .jogos-detail-inner.aberto { max-height: 900px; padding: 16px; }
   .jogos-detail-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; margin-bottom: 16px; }
   @media (max-width: 900px) { .jogos-detail-grid { grid-template-columns: 1fr; } }
   .jogos-detail-grid canvas { max-height: 200px; }
-  .jogos-detail-titulo { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 10px; }
+  .jogos-detail-titulo { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-3); margin-bottom: 10px; }
   .jogos-hist-surpresa td { color: var(--accent2); font-weight: 700; }
   .jogos-badge-surpresa { margin-left: 4px; }
   /* Simulador de apostas */
   .sim-box { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
-  .sim-box input { flex: 1; min-width: 260px; background: #0f1117; border: 1px solid var(--border); border-radius: 6px; padding: 9px 12px; color: var(--text); font-size: 13px; }
+  .sim-box input { flex: 1; min-width: 260px; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 9px 12px; color: var(--text); font-size: 13px; font-family: var(--font-mono); }
   .sim-box input:focus { outline: none; border-color: var(--accent); }
-  .sim-box button { background: var(--accent); border: none; border-radius: 6px; padding: 9px 20px; color: #fff; font-weight: 600; cursor: pointer; font-size: 13px; }
-  .sim-box button:hover { background: #b45309; }
+  .sim-box button { background: var(--accent); border: none; border-radius: var(--r-sm); padding: 9px 20px; color: #fff; font-weight: 600; cursor: pointer; font-size: 13px; }
+  .sim-box button:hover { background: var(--accent3-amber); }
   .sim-error { color: var(--red); font-size: 12px; margin: -6px 0 12px; }
   .sim-qtd-selector { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; font-size: 13px; }
   .sim-qtd-selector label { display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--text); }
-  .sim-qtd-label { font-weight: 700; color: var(--muted); text-transform: uppercase; font-size: 11px; letter-spacing: .5px; }
+  .sim-qtd-label { font-weight: 700; color: var(--text-3); text-transform: uppercase; font-size: 11px; letter-spacing: .5px; }
   .sim-jogos-lista { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
   .sim-jogo-row { display: flex; align-items: center; gap: 8px; }
-  .sim-jogo-label { width: 62px; flex-shrink: 0; font-size: 12px; color: var(--muted); font-weight: 600; }
-  .sim-jogo-input { flex: 1; min-width: 0; background: #0f1117; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: var(--text); font-size: 13px; }
+  .sim-jogo-label { width: 62px; flex-shrink: 0; font-size: 12px; color: var(--text-3); font-weight: 600; }
+  .sim-jogo-input { flex: 1; min-width: 0; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 8px 12px; color: var(--text); font-size: 13px; font-family: var(--font-mono); }
   .sim-jogo-input:focus { outline: none; border-color: var(--accent); }
-  .sim-jogo-badge { min-width: 96px; text-align: center; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 6px; flex-shrink: 0; border: 1px solid var(--border); color: var(--muted); }
-  .sim-jogo-badge.ok { background: rgba(16,185,129,.15); color: var(--green); border-color: rgba(16,185,129,.4); }
-  .sim-jogo-badge.parcial { background: rgba(245,158,11,.15); color: #fbbf24; border-color: rgba(245,158,11,.4); }
+  .sim-jogo-badge { min-width: 96px; text-align: center; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: var(--r-sm); flex-shrink: 0; border: 1px solid var(--border); color: var(--text-3); }
+  .sim-jogo-badge.ok { background: rgba(34,197,94,.15); color: var(--green); border-color: rgba(34,197,94,.4); }
+  .sim-jogo-badge.parcial { background: rgba(245,158,11,.15); color: var(--gold); border-color: rgba(245,158,11,.4); }
   .sim-jogo-badge.erro { background: rgba(239,68,68,.15); color: var(--red); border-color: rgba(239,68,68,.4); }
-  .sim-jogo-remove { background: transparent; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; cursor: pointer; color: var(--muted); font-size: 13px; flex-shrink: 0; }
+  .sim-jogo-remove { background: transparent; border: 1px solid var(--border); border-radius: var(--r-sm); padding: 6px 10px; cursor: pointer; color: var(--text-3); font-size: 13px; flex-shrink: 0; }
   .sim-jogo-remove:hover { border-color: var(--red); color: var(--red); }
   .sim-acoes { display: flex; gap: 10px; margin-bottom: 14px; }
-  .sim-acoes button { background: var(--accent); border: none; border-radius: 6px; padding: 9px 18px; color: #fff; font-weight: 600; cursor: pointer; font-size: 13px; }
-  .sim-acoes button:hover { background: #b45309; }
+  .sim-acoes button { background: var(--accent); border: none; border-radius: var(--r-sm); padding: 9px 18px; color: #fff; font-weight: 600; cursor: pointer; font-size: 13px; }
+  .sim-acoes button:hover { background: var(--accent3-amber); }
   .sim-acoes #sim-btn-add { background: transparent; border: 1px solid var(--border); color: var(--text); }
   .sim-acoes #sim-btn-add:hover { border-color: var(--accent); color: var(--accent2); }
-  .sim-aviso { color: #fbbf24; font-size: 12px; margin-bottom: 10px; }
+  .sim-aviso { color: var(--gold); font-size: 12px; margin-bottom: 10px; }
   .sim-compare-row.destaque-ouro td { background: rgba(245,158,11,.12); }
   .sim-trofeu { margin-left: 4px; }
   .sim-detalhe-toggle { cursor: pointer; color: var(--accent2); font-size: 11px; background: none; border: none; padding: 0; text-decoration: underline; }
   .sim-detalhe-painel { display: none; padding: 10px 0 4px; }
   .sim-detalhe-painel.aberto { display: block; }
-  .sim-detalhe-item { display: inline-block; margin: 2px 6px 2px 0; padding: 3px 8px; border-radius: 6px; background: #1e2130; font-size: 11px; color: var(--text); }
-  .sim-copiar-btn { margin-top: 12px; background: transparent; border: 1px solid var(--border); border-radius: 6px; padding: 8px 16px; color: var(--text); cursor: pointer; font-size: 12px; }
+  .sim-detalhe-item { display: inline-block; margin: 2px 6px 2px 0; padding: 3px 8px; border-radius: var(--r-sm); background: var(--bg3); font-size: 11px; color: var(--text); font-family: var(--font-mono); }
+  .sim-copiar-btn { margin-top: 12px; background: transparent; border: 1px solid var(--border); border-radius: var(--r-sm); padding: 8px 16px; color: var(--text); cursor: pointer; font-size: 12px; }
   .sim-copiar-btn:hover { border-color: var(--accent); color: var(--accent2); }
   .page-tabs { display: flex; gap: 6px; padding: 16px 24px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
   .page-tab { padding: 10px 20px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; flex-shrink: 0; transition: background .15s, color .15s, border-color .15s; }
@@ -1098,7 +1118,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .hist-detail-inner { padding: 10px 12px 14px; }
   .hist-detail-titulo { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
   .hist-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-  .hist-badge { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; background: #3d2a0f; border: 1px solid #7a4a0f; color: #fff; font-weight: 700; font-size: 11px; }
+  .hist-badge { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: var(--bg3); border: 1px solid var(--border-2); font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--text); margin: 2px; }
   .hist-detail-meta { display: flex; gap: 20px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 6px; }
   .hist-detail-meta b { color: var(--text); }
 </style>
@@ -1487,11 +1507,38 @@ function animarContador(el, valorFinal, decimais) {
   setTimeout(finalizar, 1500);
 }
 
-// gradiente âmbar único (dark brown → gold) usado em numgrid, matriz de
-// blocos e heatmap mensal — substitui o gradiente verde da Mega-Sena/Lotofácil
+// paleta âmbar por percentil (8 tons: cinza → âmbar → dourado) usada em
+// numgrid, matriz de blocos, heatmap mensal e gráfico de frequência —
+// substitui a interpolação linear de 2 pontos anterior
+const HEAT_STOPS = [
+  { bg: '#1a1a24', fg: '#404058' },
+  { bg: '#2e2010', fg: '#d97706' },
+  { bg: '#3a2812', fg: '#fbbf24' },
+  { bg: '#483014', fg: '#fcd34d' },
+  { bg: '#583c16', fg: '#fde68a' },
+  { bg: '#6b4a18', fg: '#fef3c7' },
+  { bg: '#c4973a', fg: '#fff8e8' },
+  { bg: '#d4a830', fg: '#fff9e0' },
+];
+function stopFor(p) {
+  if (p >= 0.90) return HEAT_STOPS[7];
+  if (p >= 0.70) return HEAT_STOPS[6];
+  if (p >= 0.55) return HEAT_STOPS[5];
+  if (p >= 0.40) return HEAT_STOPS[4];
+  if (p >= 0.25) return HEAT_STOPS[3];
+  if (p >= 0.10) return HEAT_STOPS[2];
+  if (p > 0)     return HEAT_STOPS[1];
+  return HEAT_STOPS[0];
+}
+function hexToRgba(hex, alpha) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16), g = parseInt(h.substring(2, 4), 16), b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+// mantém compatibilidade com os pontos de chamada que só usam o background
+// (gráfico de frequência, matriz de coocorrência, heatmap mensal)
 function corGradienteAmbar(t) {
-  const r = Math.round(61 + t * 190), g = Math.round(35 + t * 156), b = Math.round(10 + t * 26);
-  return `rgb(${r},${g},${b})`;
+  return stopFor(t).bg;
 }
 
 // ── módulos que reagem ao seletor de período ─────────────────────────────────
@@ -1522,15 +1569,18 @@ function renderNumGrid(bundle) {
   const grid = document.getElementById('numgrid');
   grid.innerHTML = '';
   const freq = bundle.frequencia;
-  const vals = Object.values(freq);
-  const minV = Math.min(...vals), maxV = Math.max(...vals);
-  for (let d = 0; d <= 99; d++) {
+  const entradas = Object.entries(freq).map(([d, c]) => ({ d: +d, c }));
+  const ordenado = [...entradas].sort((a, b) => a.c - b.c);
+  const rank = new Map(ordenado.map((e, i) => [e.d, i / Math.max(1, ordenado.length - 1)]));
+  for (let d = 0; d <= 99; d++) {  // universo 00-99 (zero-indexado) — NÃO alterar para 1-100
     const cnt = freq[d] || 0;
-    const t = maxV > minV ? (cnt - minV) / (maxV - minV) : 0;
+    const p = rank.get(d) ?? 0;
+    const { bg, fg } = stopFor(p);
     const cell = document.createElement('div');
     cell.className = 'numgrid-cell' + (numerosSelecionados.has(d) ? ' selecionada' : '');
     cell.dataset.num = String(d);
-    cell.style.background = corGradienteAmbar(t);
+    cell.style.background = bg;
+    cell.style.color = fg;
     cell.textContent = String(d).padStart(2, '0');
     cell.title = `Dezena ${String(d).padStart(2,'0')}: ${cnt} vezes (${bundle.meta.total ? (cnt/bundle.meta.total*100).toFixed(1) : '0.0'}%)`;
     grid.appendChild(cell);
@@ -3019,7 +3069,7 @@ function desenharTabelaBlocosMensal(dados) {
     let celulas = `<td style="color:var(--muted)">${d.periodo}</td>`;
     d.medias.forEach(v => {
       const t = maxV > minV ? (v - minV) / (maxV - minV) : 0;
-      celulas += `<td style="background:${corGradienteAmbar(t).replace('rgb', 'rgba').replace(')', ',.35)')}; text-align:center;">${v}</td>`;
+      celulas += `<td style="background:${hexToRgba(corGradienteAmbar(t), .35)}; text-align:center;">${v}</td>`;
     });
     tr.innerHTML = celulas;
     tbody.appendChild(tr);
