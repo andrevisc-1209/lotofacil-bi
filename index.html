@@ -26,6 +26,7 @@
     --accent-lotofacil: #7c6af7; --accent-lotofacil-2: #9d8fff;
     --accent-megasena:  #10b981; --accent-megasena-2:  #34d399;
     --accent-lotomania: #d97706; --accent-lotomania-2: #fbbf24;
+    --accent-duplasena: #e11d48; --accent-duplasena-2: #fb7185;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -38,11 +39,11 @@
     font-family: var(--font);
     padding: 24px;
   }
-  .wrap { width: 100%; max-width: 820px; text-align: center; }
+  .wrap { width: 100%; max-width: 1040px; text-align: center; }
   h1 { font-size: 30px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 12px; letter-spacing: -0.02em; }
   .sub { color: var(--text-3); font-size: 14px; margin-bottom: 40px; }
-  .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
-  @media (max-width: 900px) { .cards { grid-template-columns: 1fr 1fr; } }
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  @media (max-width: 1000px) { .cards { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
 
   a.menu-card {
@@ -57,6 +58,7 @@
   a.menu-card.lotofacil:hover { border-color: var(--accent-lotofacil); box-shadow: 0 8px 32px rgba(124,106,247,.18); }
   a.menu-card.megasena:hover  { border-color: var(--accent-megasena);  box-shadow: 0 8px 32px rgba(16,185,129,.18); }
   a.menu-card.lotomania:hover { border-color: var(--accent-lotomania); box-shadow: 0 8px 32px rgba(217,119,6,.18); }
+  a.menu-card.duplasena:hover { border-color: var(--accent-duplasena); box-shadow: 0 8px 32px rgba(225,29,72,.18); }
 
   .menu-card-icon { font-size: 32px; }
   .menu-card-title { font-size: 19px; font-weight: 700; color: var(--text); }
@@ -66,6 +68,7 @@
   .lotofacil .menu-card-count { color: var(--accent-lotofacil-2); }
   .megasena  .menu-card-count { color: var(--accent-megasena-2); }
   .lotomania .menu-card-count { color: var(--accent-lotomania-2); }
+  .duplasena .menu-card-count { color: var(--accent-duplasena-2); }
   .menu-card-sub { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: .06em; margin-top: -4px; }
 
   .menu-card-btn {
@@ -75,6 +78,7 @@
   .lotofacil .menu-card-btn { background: var(--accent-lotofacil); }
   .megasena  .menu-card-btn { background: var(--accent-megasena); }
   .lotomania .menu-card-btn { background: var(--accent-lotomania); }
+  .duplasena .menu-card-btn { background: var(--accent-duplasena); }
 
   footer { margin-top: 36px; color: var(--text-3); font-size: 11px; }
 </style>
@@ -102,6 +106,13 @@
       <div class="menu-card-icon">🎯</div>
       <div class="menu-card-title">Lotomania</div>
       <div class="menu-card-count" id="menu-total-lotomania">— sorteios</div>
+      <div class="menu-card-sub">Histórico completo</div>
+      <span class="menu-card-btn">Abrir BI →</span>
+    </a>
+    <a class="menu-card duplasena" href="duplasena.html">
+      <div class="menu-card-icon">🎲</div>
+      <div class="menu-card-title">Dupla Sena</div>
+      <div class="menu-card-count" id="menu-total-duplasena">— sorteios</div>
       <div class="menu-card-sub">Histórico completo</div>
       <span class="menu-card-btn">Abrir BI →</span>
     </a>
@@ -134,6 +145,7 @@ async function contarSorteios(tabela, elId) {
 contarSorteios('sorteios', 'menu-total-lotofacil');
 contarSorteios('megasena_sorteios', 'menu-total-megasena');
 contarSorteios('lotomania_sorteios', 'menu-total-lotomania');
+contarSorteios('duplasena_sorteios', 'menu-total-duplasena');
 </script>
 </body>
 </html>
