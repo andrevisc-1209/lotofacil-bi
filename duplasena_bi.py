@@ -382,14 +382,18 @@ def _meta_sorteio_rodada(row: dict, rodada: int) -> dict:
     sorteios_meta, alinhada 1:1 com sorteios_raw (que também tem 2 entradas
     por concurso). Isso permite ao JS zipar sorteios_raw[i]/sorteios_meta[i]
     igual megasena_bi faz, sem se preocupar com o descompasso de tamanho que
-    existiria se sorteios_meta ficasse em granularidade de concurso."""
-    campo_valor = f"valor_sena{rodada}"
+    existiria se sorteios_meta ficasse em granularidade de concurso.
+    Inclui valor_sena/quina/quadra/terno da rodada — usado pelo Simulador de
+    Jogo (bolinhas) pra calcular ganho real por faixa (3/4/5/6 acertos)."""
     return {
         "concurso": _to_int(row["concurso"]),
         "data": row["data"],
         "rodada": rodada,
         "acumulado": _acumulado_bool(row.get("acumulado")),
-        "valor_sena": _to_float(row.get(campo_valor)),
+        "valor_sena": _to_float(row.get(f"valor_sena{rodada}")),
+        "valor_quina": _to_float(row.get(f"valor_quina{rodada}")),
+        "valor_quadra": _to_float(row.get(f"valor_quadra{rodada}")),
+        "valor_terno": _to_float(row.get(f"valor_terno{rodada}")),
     }
 
 
@@ -740,6 +744,24 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     .numgrid-cell { font-size: 10px; }
     .numgrid-footer { flex-direction: column; align-items: stretch; }
   }
+  /* simulador de jogo — seleção visual por bolinhas */
+  .simball-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 8px; margin-bottom: 16px; }
+  .simball-cell {
+    aspect-ratio: 1; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 13px; font-family: var(--font-mono); color: var(--text-2);
+    background: var(--bg3); border: 2px solid var(--border); cursor: pointer;
+    transition: transform .12s ease, background .12s ease, border-color .12s ease, color .12s ease;
+    user-select: none;
+  }
+  .simball-cell:hover { border-color: var(--accent2); transform: scale(1.08); }
+  .simball-cell.selecionada { background: var(--accent); border-color: var(--accent); color: #fff; transform: scale(1.05); }
+  .simball-cell.desabilitada { opacity: .35; cursor: not-allowed; }
+  .simball-cell.desabilitada:hover { transform: none; border-color: var(--border); }
+  .simball-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .simball-contador { font-size: 13px; color: var(--text-2); font-weight: 600; }
+  .simball-contador.completo { color: var(--accent2); }
+  .dsim-rodada-titulo { font-size: 12px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 8px; }
+  .dsim-rodada-titulo:first-of-type { margin-top: 0; }
   .tabs { display: flex; gap: 0; margin-bottom: 14px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
   .tab { padding: 7px 16px; border-radius: 0; border: none; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 600; transition: color .15s, border-bottom-color .15s; margin-bottom: -1px; }
   .tab.active { background: transparent; border-bottom-color: var(--accent); color: var(--text); }
@@ -1112,6 +1134,26 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <div class="card" id="rodadas-identicas-card">
     <h2>🎯 Rodadas idênticas (1ª = 2ª no mesmo concurso)</h2>
     <div id="rodadas-identicas-conteudo"></div>
+  </div>
+</div>
+
+<!-- Simulador de Jogo — seleção visual por bolinhas -->
+<div class="grid" style="grid-template-columns: 1fr;">
+  <div class="card">
+    <h2>🎱 Simulador de Jogo</h2>
+    <p style="color:var(--muted); font-size:12px; margin-bottom:14px;">
+      Clique nas dezenas para montar seu jogo (6 números de 01 a 50) e veja como ele teria se saído contra as duas rodadas do período selecionado.
+    </p>
+    <div class="simball-grid" id="simball-grid"></div>
+    <div class="simball-footer">
+      <span class="simball-contador" id="simball-contador">0/6 selecionados</span>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-secondary" id="simball-limpar" type="button">Limpar</button>
+        <button class="btn-primary" id="simball-btn" type="button" disabled>Simular ▶</button>
+      </div>
+    </div>
+    <div class="sim-error" id="simball-error" style="display:none;"></div>
+    <div id="simball-result"></div>
   </div>
 </div>
 
@@ -3003,6 +3045,170 @@ if (DATA.meta.supabase) {
   wrap.appendChild(btnAtualizar);
   wrap.appendChild(btnGear);
   verificarNovosSorteios();
+}
+
+// ── Simulador de Jogo (bolinhas) — universo 01-50, exatamente 6 números.
+// Dupla Sena nunca teve simulador de texto pra reaproveitar (fora do escopo
+// original), então o cálculo é novo aqui — mas segue o mesmo padrão dos
+// outros 3 dashboards: sorteios_raw/sorteios_meta já vêm agrupados (pool das
+// 2 rodadas, sorteios_meta[i].rodada diz de qual rodada cada entrada é), e o
+// prêmio de cada faixa (3/4/5/6 acertos) já vem pronto por rodada em
+// sorteios_meta (valor_sena/quina/quadra/terno — ver _meta_sorteio_rodada no
+// Python). Custo é por CONCURSO (uma aposta cobre as 2 rodadas), não por
+// sorteio individual — por isso divide sorteiosRaw.length por 2. ───────────
+const CUSTO_DUPLASENA_JS = 2.50;
+const CAMPO_FAIXA_DUPLASENA_JS = { 6: 'valor_sena', 5: 'valor_quina', 4: 'valor_quadra', 3: 'valor_terno' };
+
+function duplasenaSimularJogo(numeros, sorteiosRaw, sorteiosMeta) {
+  const aposta = new Set(numeros);
+  const pontos = { 1: { 3: 0, 4: 0, 5: 0, 6: 0 }, 2: { 3: 0, 4: 0, 5: 0, 6: 0 } };
+  const premiados = [];
+  let ganho = 0;
+  sorteiosRaw.forEach((s, i) => {
+    const acertos = s.filter(d => aposta.has(d)).length;
+    if (acertos < 3) return;
+    const meta = sorteiosMeta[i];
+    if (!meta) return;
+    const rodada = meta.rodada;
+    pontos[rodada][acertos]++;
+    const campo = CAMPO_FAIXA_DUPLASENA_JS[acertos];
+    const premio = meta[campo] || 0;
+    ganho += premio;
+    premiados.push({ concurso: meta.concurso, data: meta.data, rodada, acertos, premio: +premio.toFixed(2) });
+  });
+  premiados.sort((a, b) => b.concurso - a.concurso);
+  const totalConcursos = sorteiosRaw.length / 2;
+  const custo = +(CUSTO_DUPLASENA_JS * totalConcursos).toFixed(2);
+  ganho = +ganho.toFixed(2);
+  const saldo = +(ganho - custo).toFixed(2);
+  const roi = custo ? +(saldo / custo * 100).toFixed(1) : 0;
+  return { numeros, pontos, premiados, totalConcursos, custo, ganho, saldo, roi };
+}
+
+function duplasenaRenderResultado(r, elId) {
+  const el = document.getElementById(elId);
+  el.innerHTML = '';
+  const dezenasTxt = r.numeros.map(n => String(n).padStart(2, '0')).join(' · ');
+
+  const titulo = document.createElement('div');
+  titulo.style.cssText = 'font-weight:700; margin-bottom:10px;';
+  titulo.textContent = `Jogo: ${dezenasTxt}`;
+  el.appendChild(titulo);
+
+  [1, 2].forEach(rodada => {
+    const label = document.createElement('div');
+    label.className = 'dsim-rodada-titulo';
+    label.textContent = `${rodada}ª Rodada`;
+    el.appendChild(label);
+    const table = document.createElement('table');
+    table.innerHTML = `<thead><tr><th>Faixa</th><th>Vezes que ocorreu</th></tr></thead>`;
+    const tbody = document.createElement('tbody');
+    [6, 5, 4, 3].forEach(p => {
+      const tr = document.createElement('tr');
+      const nomes = { 6: 'Sena (6 acertos)', 5: 'Quina (5 acertos)', 4: 'Quadra (4 acertos)', 3: 'Terno (3 acertos)' };
+      tr.innerHTML = `<td class="pontos">${nomes[p]}</td><td>${r.pontos[rodada][p]}</td>`;
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    el.appendChild(table);
+  });
+
+  const finDiv = document.createElement('div');
+  finDiv.className = 'mini-stats';
+  finDiv.innerHTML = `
+    <div>Concursos no período<b>${r.totalConcursos}</b></div>
+    <div>Custo total<b>${formatarMoeda(r.custo)}</b></div>
+    <div>Ganho estimado<b>${formatarMoeda(r.ganho)}</b></div>
+    <div>Saldo<b class="${r.saldo >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(r.saldo)}</b></div>
+    <div>ROI<b class="${r.roi >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(r.roi)}</b></div>`;
+  el.appendChild(finDiv);
+
+  if (r.premiados.length) {
+    const btnToggle = document.createElement('button');
+    btnToggle.className = 'sim-detalhe-toggle';
+    btnToggle.style.marginTop = '10px';
+    btnToggle.textContent = `Ver em quais concursos pontuou (${r.premiados.length})`;
+    const painel = document.createElement('div');
+    painel.className = 'sim-detalhe-painel';
+    r.premiados.forEach(p => {
+      const item = document.createElement('span');
+      item.className = 'sim-detalhe-item';
+      item.textContent = `Concurso ${p.concurso} (${p.data}) — ${p.rodada}ª rodada, ${p.acertos} pts`;
+      painel.appendChild(item);
+    });
+    btnToggle.addEventListener('click', () => {
+      painel.classList.toggle('aberto');
+      btnToggle.textContent = painel.classList.contains('aberto')
+        ? 'Esconder concursos'
+        : `Ver em quais concursos pontuou (${r.premiados.length})`;
+    });
+    el.appendChild(btnToggle);
+    el.appendChild(painel);
+  }
+}
+
+{
+  const SIMBALL_MIN = 6;
+  const grid = document.getElementById('simball-grid');
+  const contadorEl = document.getElementById('simball-contador');
+  const btnSimular = document.getElementById('simball-btn');
+  const btnLimpar = document.getElementById('simball-limpar');
+  const errBallEl = document.getElementById('simball-error');
+  const selecionadas = new Set();
+
+  function atualizarContador() {
+    contadorEl.textContent = `${selecionadas.size}/${SIMBALL_MIN} selecionados`;
+    contadorEl.classList.toggle('completo', selecionadas.size === SIMBALL_MIN);
+    btnSimular.disabled = selecionadas.size !== SIMBALL_MIN;
+    grid.querySelectorAll('.simball-cell').forEach(cell => {
+      const n = +cell.dataset.num;
+      cell.classList.toggle('desabilitada', selecionadas.size >= SIMBALL_MIN && !selecionadas.has(n));
+    });
+  }
+
+  for (let n = 1; n <= 50; n++) {
+    const cell = document.createElement('div');
+    cell.className = 'simball-cell';
+    cell.dataset.num = String(n);
+    cell.textContent = String(n).padStart(2, '0');
+    cell.addEventListener('click', () => {
+      if (selecionadas.has(n)) {
+        selecionadas.delete(n);
+        cell.classList.remove('selecionada');
+      } else {
+        if (selecionadas.size >= SIMBALL_MIN) return;
+        selecionadas.add(n);
+        cell.classList.add('selecionada');
+      }
+      atualizarContador();
+    });
+    grid.appendChild(cell);
+  }
+  atualizarContador();
+
+  btnLimpar.addEventListener('click', () => {
+    selecionadas.clear();
+    grid.querySelectorAll('.simball-cell').forEach(cell => cell.classList.remove('selecionada'));
+    atualizarContador();
+    errBallEl.style.display = 'none';
+    document.getElementById('simball-result').innerHTML = '';
+  });
+
+  btnSimular.addEventListener('click', () => {
+    errBallEl.style.display = 'none';
+    document.getElementById('simball-result').innerHTML = '';
+    if (selecionadas.size !== SIMBALL_MIN) {
+      errBallEl.textContent = `Selecione exatamente ${SIMBALL_MIN} dezenas.`;
+      errBallEl.style.display = 'block';
+      return;
+    }
+    const numeros = [...selecionadas].sort((a, b) => a - b);
+    const bundle = bundleAtivo() || DATA;
+    const sorteiosRaw = bundle.sorteios_raw || DATA.sorteios_raw;
+    const sorteiosMeta = bundle.sorteios_meta || DATA.sorteios_meta || [];
+    const resultado = duplasenaSimularJogo(numeros, sorteiosRaw, sorteiosMeta);
+    duplasenaRenderResultado(resultado, 'simball-result');
+  });
 }
 </script>
 </body>

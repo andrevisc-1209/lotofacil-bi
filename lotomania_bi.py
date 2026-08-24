@@ -901,6 +901,23 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     .numgrid-cell { font-size: 9px; }
     .numgrid-footer { flex-direction: column; align-items: stretch; }
   }
+  /* simulador de jogo — seleção visual por bolinhas (reusa o cálculo do
+     simulador de aposta por texto, só troca o método de entrada) */
+  .simball-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(32px, 1fr)); gap: 6px; margin-bottom: 16px; }
+  .simball-cell {
+    aspect-ratio: 1; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 11px; font-family: var(--font-mono); color: var(--text-2);
+    background: var(--bg3); border: 2px solid var(--border); cursor: pointer;
+    transition: transform .12s ease, background .12s ease, border-color .12s ease, color .12s ease;
+    user-select: none;
+  }
+  .simball-cell:hover { border-color: var(--accent2); transform: scale(1.08); }
+  .simball-cell.selecionada { background: var(--accent); border-color: var(--accent); color: #fff; transform: scale(1.05); }
+  .simball-cell.desabilitada { opacity: .35; cursor: not-allowed; }
+  .simball-cell.desabilitada:hover { transform: none; border-color: var(--border); }
+  .simball-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .simball-contador { font-size: 13px; color: var(--text-2); font-weight: 600; }
+  .simball-contador.completo { color: var(--accent2); }
   .tabs { display: flex; gap: 0; margin-bottom: 14px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
   .tab { padding: 7px 16px; border-radius: 0; border: none; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 600; transition: color .15s, border-bottom-color .15s; margin-bottom: -1px; }
   .tab.active { background: transparent; border-bottom-color: var(--accent); color: var(--text); }
@@ -1432,6 +1449,26 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <h2>📊 Tabela comparativa</h2>
     <p style="color:var(--muted); font-size:12px; margin-bottom:12px;">Clique numa linha para ver o histórico completo de sorteios em que o jogo pontuou. Clique nos títulos das colunas pra ordenar.</p>
     <div id="jogos-tabela-wrap" style="overflow-x:auto;"></div>
+  </div>
+</div>
+
+<!-- Simulador de Jogo — seleção visual por bolinhas -->
+<div class="grid" style="grid-template-columns: 1fr;">
+  <div class="card">
+    <h2>🎱 Simulador de Jogo</h2>
+    <p style="color:var(--muted); font-size:12px; margin-bottom:14px;">
+      Clique nas dezenas para montar seu jogo (50 números de 00 a 99) e veja como ele teria se saído contra o período selecionado.
+    </p>
+    <div class="simball-grid" id="simball-grid"></div>
+    <div class="simball-footer">
+      <span class="simball-contador" id="simball-contador">0/50 selecionados</span>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-secondary" id="simball-limpar" type="button">Limpar</button>
+        <button class="btn-primary" id="simball-btn" type="button" disabled>Simular ▶</button>
+      </div>
+    </div>
+    <div class="sim-error" id="simball-error" style="display:none;"></div>
+    <div id="simball-result"></div>
   </div>
 </div>
 
@@ -3320,7 +3357,8 @@ function validarJogoTextoLotomania(texto) {
 
   let ultimosResultadosLotomania = []; // guardado para o botão "copiar resultado"
 
-  function renderizarResultadoUnicoLotomania(resultado) {
+  function renderizarResultadoUnicoLotomania(resultado, targetEl) {
+    targetEl = targetEl || resultEl; // default preserva o comportamento original (simulador por texto)
     const total = resultado.totalSorteios;
     const table = document.createElement('table');
     table.innerHTML = `<thead><tr><th>Faixa</th><th>Vezes que ocorreu</th><th>% dos sorteios</th></tr></thead>`;
@@ -3332,7 +3370,7 @@ function validarJogoTextoLotomania(texto) {
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
-    resultEl.appendChild(table);
+    targetEl.appendChild(table);
 
     const finDiv = document.createElement('div');
     finDiv.className = 'mini-stats';
@@ -3342,7 +3380,7 @@ function validarJogoTextoLotomania(texto) {
       <div>Ganho estimado<b>${formatarMoeda(resultado.ganho)}</b></div>
       <div>Saldo<b class="${resultado.saldo >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(resultado.saldo)}</b></div>
       <div>ROI<b class="${resultado.roi >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(resultado.roi)}</b></div>`;
-    resultEl.appendChild(finDiv);
+    targetEl.appendChild(finDiv);
 
     const btnToggle = document.createElement('button');
     btnToggle.className = 'sim-detalhe-toggle';
@@ -3355,8 +3393,8 @@ function validarJogoTextoLotomania(texto) {
         ? 'Esconder concursos'
         : `Ver em quais concursos pontuou (${resultado.concursosPontuados.length})`;
     });
-    resultEl.appendChild(btnToggle);
-    resultEl.appendChild(painel);
+    targetEl.appendChild(btnToggle);
+    targetEl.appendChild(painel);
   }
 
   function renderizarResultadoComparativoLotomania(resultados) {
@@ -3501,6 +3539,74 @@ function validarJogoTextoLotomania(texto) {
     resultEl.appendChild(btnCopiar);
     btnCopiar.style.display = 'inline-block';
   });
+
+  // ── Simulador de Jogo (bolinhas) — mesma entrada de dados (universo 00-99,
+  // exatamente 50 números), reaproveita calcularResultadoLotomania/
+  // renderizarResultadoUnicoLotomania acima em vez de duplicar o cálculo. ──
+  {
+    const SIMBALL_MIN = 50;
+    const grid = document.getElementById('simball-grid');
+    const contadorEl = document.getElementById('simball-contador');
+    const btnSimular = document.getElementById('simball-btn');
+    const btnLimpar = document.getElementById('simball-limpar');
+    const errBallEl = document.getElementById('simball-error');
+    const resultBallEl = document.getElementById('simball-result');
+    const selecionadas = new Set();
+
+    function atualizarContador() {
+      contadorEl.textContent = `${selecionadas.size}/${SIMBALL_MIN} selecionados`;
+      contadorEl.classList.toggle('completo', selecionadas.size === SIMBALL_MIN);
+      btnSimular.disabled = selecionadas.size !== SIMBALL_MIN;
+      grid.querySelectorAll('.simball-cell').forEach(cell => {
+        const n = +cell.dataset.num;
+        cell.classList.toggle('desabilitada', selecionadas.size >= SIMBALL_MIN && !selecionadas.has(n));
+      });
+    }
+
+    for (let n = 0; n <= 99; n++) {
+      const cell = document.createElement('div');
+      cell.className = 'simball-cell';
+      cell.dataset.num = String(n);
+      cell.textContent = String(n).padStart(2, '0');
+      cell.addEventListener('click', () => {
+        if (selecionadas.has(n)) {
+          selecionadas.delete(n);
+          cell.classList.remove('selecionada');
+        } else {
+          if (selecionadas.size >= SIMBALL_MIN) return;
+          selecionadas.add(n);
+          cell.classList.add('selecionada');
+        }
+        atualizarContador();
+      });
+      grid.appendChild(cell);
+    }
+    atualizarContador();
+
+    btnLimpar.addEventListener('click', () => {
+      selecionadas.clear();
+      grid.querySelectorAll('.simball-cell').forEach(cell => cell.classList.remove('selecionada'));
+      atualizarContador();
+      errBallEl.style.display = 'none';
+      resultBallEl.innerHTML = '';
+    });
+
+    btnSimular.addEventListener('click', () => {
+      errBallEl.style.display = 'none';
+      resultBallEl.innerHTML = '';
+      if (selecionadas.size !== SIMBALL_MIN) {
+        errBallEl.textContent = `Selecione exatamente ${SIMBALL_MIN} dezenas.`;
+        errBallEl.style.display = 'block';
+        return;
+      }
+      const numeros = [...selecionadas].sort((a, b) => a - b);
+      const bundleSim = bundleAtivo() || DATA;
+      const sorteiosRawSim = bundleSim.sorteios_raw || DATA.sorteios_raw;
+      const sorteiosMetaSim = bundleSim.sorteios_meta || DATA.sorteios_meta || [];
+      const resultado = calcularResultadoLotomania(numeros, sorteiosRawSim, sorteiosMetaSim);
+      renderizarResultadoUnicoLotomania(resultado, resultBallEl);
+    });
+  }
 }
 
 // ── Histórico — árvore Ano → Mês → Sorteio ───────────────────────────────────
