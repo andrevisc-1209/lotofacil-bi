@@ -901,9 +901,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     .numgrid-cell { font-size: 9px; }
     .numgrid-footer { flex-direction: column; align-items: stretch; }
   }
-  .tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
-  .tab { padding: 5px 14px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 600; transition: all .15s; }
-  .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tabs { display: flex; gap: 0; margin-bottom: 14px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+  .tab { padding: 7px 16px; border-radius: 0; border: none; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 600; transition: color .15s, border-bottom-color .15s; margin-bottom: -1px; }
+  .tab.active { background: transparent; border-bottom-color: var(--accent); color: var(--text); }
   .tab-content { display: none; }
   .tab-content.active { display: block; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -1083,13 +1083,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .sim-detalhe-item { display: inline-block; margin: 2px 6px 2px 0; padding: 3px 8px; border-radius: var(--r-sm); background: var(--bg3); font-size: 11px; color: var(--text); font-family: var(--font-mono); }
   .sim-copiar-btn { margin-top: 12px; background: transparent; border: 1px solid var(--border); border-radius: var(--r-sm); padding: 8px 16px; color: var(--text); cursor: pointer; font-size: 12px; }
   .sim-copiar-btn:hover { border-color: var(--accent); color: var(--accent2); }
-  .page-tabs { display: flex; gap: 6px; padding: 16px 24px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
-  .page-tab { padding: 10px 20px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; flex-shrink: 0; transition: background .15s, color .15s, border-color .15s; }
-  .page-tab:hover { color: var(--text); background: rgba(217,119,6,.1); border-color: var(--border); }
-  .page-tab.active { color: #fff; background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 4px var(--neon); }
+  .page-tabs { display: flex; gap: 0; padding: 0 24px; border-bottom: 1px solid var(--border); overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+  .page-tab { padding: 14px 20px; border: none; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; flex-shrink: 0; transition: color .15s, border-bottom-color .15s; margin-bottom: -1px; }
+  .page-tab:hover { color: var(--text); background: transparent; }
+  .page-tab.active { color: var(--accent2); border-bottom-color: var(--accent); box-shadow: none; }
   @media (max-width: 640px) {
-    .page-tabs { padding: 12px 16px 0; gap: 4px; }
-    .page-tab { padding: 10px 16px; font-size: 13px; }
+    .page-tabs { padding: 0 16px; }
+    .page-tab { padding: 12px 14px; font-size: 13px; }
   }
   .hist-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 20px 24px 0; }
   .hist-header-info { display: flex; gap: 28px; flex-wrap: wrap; }
