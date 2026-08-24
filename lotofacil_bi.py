@@ -1054,6 +1054,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .sim-detalhe-painel { display: none; padding: 10px 0 4px; }
   .sim-detalhe-painel.aberto { display: block; }
   .sim-detalhe-item { display: inline-block; margin: 2px 6px 2px 0; padding: 3px 8px; border-radius: 6px; background: #1e2130; font-size: 11px; color: var(--text); }
+  .sim-historico { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-height: 200px; overflow-y: auto; }
+  .sim-hist-item { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 4px 10px; font-size: 11px; font-family: var(--font-mono); color: var(--text-2); white-space: nowrap; }
+  .sim-hist-item span.concurso { color: var(--accent2); font-weight: 600; }
+  .sim-hist-mais { margin-top: 8px; }
   .sim-copiar-btn { margin-top: 12px; background: transparent; border: 1px solid var(--border); border-radius: 6px; padding: 8px 16px; color: var(--text); cursor: pointer; font-size: 12px; }
   .sim-copiar-btn:hover { border-color: var(--accent); color: #a78bfa; }
   .money-pos { color: var(--green); font-weight: 700; }
@@ -1217,6 +1221,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <button class="page-tab active" id="page-tab-geral">Visão Geral</button>
   <button class="page-tab" id="page-tab-blocos">Blocos</button>
   <button class="page-tab" id="page-tab-historico">Histórico</button>
+  <button class="page-tab" id="page-tab-simulador">Simulador de Jogo</button>
 </div>
 
 <div id="page-geral" class="page-content">
@@ -1381,26 +1386,6 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   </div>
 </div>
 
-<!-- Simulador de Jogo — seleção visual por bolinhas -->
-<div class="grid" style="grid-template-columns: 1fr;">
-  <div class="card">
-    <h2>🎱 Simulador de Jogo</h2>
-    <p style="color:var(--muted); font-size:12px; margin-bottom:14px;">
-      Clique nas dezenas para montar seu jogo (15 números de 01 a 25) e veja como ele teria se saído contra o período selecionado.
-    </p>
-    <div class="simball-grid" id="simball-grid"></div>
-    <div class="simball-footer">
-      <span class="simball-contador" id="simball-contador">0/15 selecionados</span>
-      <div style="display:flex; gap:8px;">
-        <button class="btn-secondary" id="simball-limpar" type="button">Limpar</button>
-        <button class="btn-primary" id="simball-btn" type="button" disabled>Simular ▶</button>
-      </div>
-    </div>
-    <div class="sim-error" id="simball-error" style="display:none;"></div>
-    <div id="simball-result"></div>
-  </div>
-</div>
-
 <!-- Simulador de aposta -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card">
@@ -1553,6 +1538,27 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 </div>
 
 </div><!-- /page-historico -->
+
+<div id="page-simulador" class="page-content" style="display:none;">
+<div class="grid" style="grid-template-columns: 1fr;">
+  <div class="card">
+    <h2>🎱 Simulador de Jogo</h2>
+    <p style="color:var(--muted); font-size:12px; margin-bottom:14px;">
+      Clique nas dezenas para montar seu jogo (15 números de 01 a 25) e veja como ele teria se saído contra o período selecionado.
+    </p>
+    <div class="simball-grid" id="simball-grid"></div>
+    <div class="simball-footer">
+      <span class="simball-contador" id="simball-contador">0/15 selecionados</span>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-secondary" id="simball-limpar" type="button">Limpar</button>
+        <button class="btn-primary" id="simball-btn" type="button" disabled>Simular ▶</button>
+      </div>
+    </div>
+    <div class="sim-error" id="simball-error" style="display:none;"></div>
+    <div id="simball-result"></div>
+  </div>
+</div>
+</div><!-- /page-simulador -->
 
 <footer>Dados: API oficial Caixa Econômica Federal • {gerado_em}</footer>
 
@@ -2759,6 +2765,7 @@ renderSeletorCascata();
     { tab: 'page-tab-geral', pagina: 'page-geral' },
     { tab: 'page-tab-blocos', pagina: 'page-blocos' },
     { tab: 'page-tab-historico', pagina: 'page-historico' },
+    { tab: 'page-tab-simulador', pagina: 'page-simulador' },
   ];
   paginas.forEach(({ tab, pagina }) => {
     document.getElementById(tab).addEventListener('click', () => {
@@ -3313,12 +3320,32 @@ function validarJogoTexto(texto) {
       painel.innerHTML = '<span style="color:var(--muted); font-size:12px;">Nenhum concurso com 11+ acertos.</span>';
       return painel;
     }
-    resultado.concursosPontuados.forEach(c => {
-      const item = document.createElement('span');
-      item.className = 'sim-detalhe-item';
-      item.textContent = `Concurso ${c.concurso} (${c.data}) — ${c.acertos} pts`;
-      painel.appendChild(item);
-    });
+    // lista compacta: só #concurso e data (sem detalhes de faixa) — os N mais
+    // recentes por padrão, "ver todos" revela o resto dentro do mesmo
+    // container rolável (concursosPontuados já vem ordenado por concurso desc)
+    const lista = document.createElement('div');
+    lista.className = 'sim-historico';
+    function renderChips(qtd) {
+      lista.innerHTML = '';
+      resultado.concursosPontuados.slice(0, qtd).forEach(c => {
+        const item = document.createElement('div');
+        item.className = 'sim-hist-item';
+        item.innerHTML = `<span class="concurso">#${c.concurso}</span> ${c.data}`;
+        lista.appendChild(item);
+      });
+    }
+    renderChips(10);
+    painel.appendChild(lista);
+    if (resultado.concursosPontuados.length > 10) {
+      const btnMais = document.createElement('button');
+      btnMais.className = 'sim-detalhe-toggle sim-hist-mais';
+      btnMais.textContent = `▼ ver todos (${resultado.concursosPontuados.length})`;
+      btnMais.addEventListener('click', () => {
+        renderChips(resultado.concursosPontuados.length);
+        btnMais.remove();
+      });
+      painel.appendChild(btnMais);
+    }
     return painel;
   }
 

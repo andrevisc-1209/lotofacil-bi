@@ -791,6 +791,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .simball-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
   .simball-contador { font-size: 13px; color: var(--text-2); font-weight: 600; }
   .simball-contador.completo { color: var(--accent2); }
+  .sim-historico { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-height: 200px; overflow-y: auto; }
+  .sim-hist-item { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 4px 10px; font-size: 11px; font-family: var(--font-mono); color: var(--text-2); white-space: nowrap; }
+  .sim-hist-item span.concurso { color: var(--accent2); font-weight: 600; }
   .tabs { display: flex; gap: 0; margin-bottom: 14px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
   .tab { padding: 7px 16px; border-radius: 0; border: none; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 600; transition: color .15s, border-bottom-color .15s; margin-bottom: -1px; }
   .tab.active { background: transparent; border-bottom-color: var(--accent); color: var(--text); }
@@ -1056,6 +1059,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <button class="page-tab active" id="page-tab-geral">Visão Geral</button>
   <button class="page-tab" id="page-tab-blocos">Blocos</button>
   <button class="page-tab" id="page-tab-historico">Histórico</button>
+  <button class="page-tab" id="page-tab-simulador">Simulador de Jogo</button>
 </div>
 
 <div id="page-geral" class="page-content">
@@ -1177,26 +1181,6 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
       <span>~ Normal: dentro da faixa</span>
     </div>
     <div class="hotcold-grid" id="hotcold-grid"></div>
-  </div>
-</div>
-
-<!-- Simulador de Jogo — seleção visual por bolinhas -->
-<div class="grid" style="grid-template-columns: 1fr;">
-  <div class="card">
-    <h2>🎱 Simulador de Jogo</h2>
-    <p style="color:var(--muted); font-size:12px; margin-bottom:14px;">
-      Clique nas dezenas para montar seu jogo (6 números de 01 a 60) e veja como ele teria se saído contra o período selecionado.
-    </p>
-    <div class="simball-grid" id="simball-grid"></div>
-    <div class="simball-footer">
-      <span class="simball-contador" id="simball-contador">0/6 selecionados</span>
-      <div style="display:flex; gap:8px;">
-        <button class="btn-secondary" id="simball-limpar" type="button">Limpar</button>
-        <button class="btn-primary" id="simball-btn" type="button" disabled>Simular ▶</button>
-      </div>
-    </div>
-    <div class="sim-error" id="simball-error" style="display:none;"></div>
-    <div id="simball-result"></div>
   </div>
 </div>
 
@@ -1334,6 +1318,27 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 </div>
 
 </div><!-- /page-historico -->
+
+<div id="page-simulador" class="page-content" style="display:none;">
+<div class="grid" style="grid-template-columns: 1fr;">
+  <div class="card">
+    <h2>🎱 Simulador de Jogo</h2>
+    <p style="color:var(--muted); font-size:12px; margin-bottom:14px;">
+      Clique nas dezenas para montar seu jogo (6 números de 01 a 60) e veja como ele teria se saído contra o período selecionado.
+    </p>
+    <div class="simball-grid" id="simball-grid"></div>
+    <div class="simball-footer">
+      <span class="simball-contador" id="simball-contador">0/6 selecionados</span>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-secondary" id="simball-limpar" type="button">Limpar</button>
+        <button class="btn-primary" id="simball-btn" type="button" disabled>Simular ▶</button>
+      </div>
+    </div>
+    <div class="sim-error" id="simball-error" style="display:none;"></div>
+    <div id="simball-result"></div>
+  </div>
+</div>
+</div><!-- /page-simulador -->
 
 <footer>Dados: API oficial Caixa Econômica Federal • {gerado_em}</footer>
 
@@ -2858,8 +2863,10 @@ function megasimRenderResultado(resultados, elId) {
     const dezenasTxt = r.numeros.map(n => String(n).padStart(2, '0')).join(' · ');
     let senaHtml = '';
     if (r.pontos[6] > 0) {
-      const lista = r.senas.map(s => `Concurso ${s.concurso} (${s.data})`).join(', ');
-      senaHtml = `<div class="megasim-sena">🏆 ACERTOU A SENA!<div>${lista}</div></div>`;
+      // lista compacta: só #concurso e data (mesmo padrão do histórico de
+      // premiações do simulador de 15/50/6 dezenas das outras loterias)
+      const chips = r.senas.map(s => `<div class="sim-hist-item"><span class="concurso">#${s.concurso}</span> ${s.data}</div>`).join('');
+      senaHtml = `<div class="megasim-sena">🏆 ACERTOU A SENA!<div class="sim-historico">${chips}</div></div>`;
     }
     card.innerHTML = `
       <div class="megasim-jogo-titulo">Jogo ${i + 1}: ${dezenasTxt}</div>
@@ -2982,6 +2989,7 @@ function megasimRenderResultado(resultados, elId) {
     { tab: 'page-tab-geral', pagina: 'page-geral' },
     { tab: 'page-tab-blocos', pagina: 'page-blocos' },
     { tab: 'page-tab-historico', pagina: 'page-historico' },
+    { tab: 'page-tab-simulador', pagina: 'page-simulador' },
   ];
   paginas.forEach(({ tab, pagina }) => {
     document.getElementById(tab).addEventListener('click', () => {

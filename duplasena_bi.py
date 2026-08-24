@@ -760,6 +760,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .simball-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
   .simball-contador { font-size: 13px; color: var(--text-2); font-weight: 600; }
   .simball-contador.completo { color: var(--accent2); }
+  .sim-error { color: var(--red); font-size: 12px; margin: -6px 0 12px; }
+  .sim-detalhe-toggle { cursor: pointer; color: var(--accent2); font-size: 11px; background: none; border: none; padding: 0; text-decoration: underline; }
+  .sim-detalhe-painel { display: none; padding: 10px 0 4px; }
+  .sim-detalhe-painel.aberto { display: block; }
+  .sim-historico { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-height: 200px; overflow-y: auto; }
+  .sim-hist-item { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 4px 10px; font-size: 11px; font-family: var(--font-mono); color: var(--text-2); white-space: nowrap; }
+  .sim-hist-item span.concurso { color: var(--accent2); font-weight: 600; }
+  .sim-hist-mais { margin-top: 8px; }
   .dsim-rodada-titulo { font-size: 12px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 8px; }
   .dsim-rodada-titulo:first-of-type { margin-top: 0; }
   .tabs { display: flex; gap: 0; margin-bottom: 14px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
@@ -993,6 +1001,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <button class="page-tab active" id="page-tab-geral">Visão Geral</button>
   <button class="page-tab" id="page-tab-blocos">Blocos</button>
   <button class="page-tab" id="page-tab-historico">Histórico</button>
+  <button class="page-tab" id="page-tab-simulador">Simulador de Jogo</button>
 </div>
 
 <div id="page-geral" class="page-content">
@@ -1137,25 +1146,6 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   </div>
 </div>
 
-<!-- Simulador de Jogo — seleção visual por bolinhas -->
-<div class="grid" style="grid-template-columns: 1fr;">
-  <div class="card">
-    <h2>🎱 Simulador de Jogo</h2>
-    <p style="color:var(--muted); font-size:12px; margin-bottom:14px;">
-      Clique nas dezenas para montar seu jogo (6 números de 01 a 50) e veja como ele teria se saído contra as duas rodadas do período selecionado.
-    </p>
-    <div class="simball-grid" id="simball-grid"></div>
-    <div class="simball-footer">
-      <span class="simball-contador" id="simball-contador">0/6 selecionados</span>
-      <div style="display:flex; gap:8px;">
-        <button class="btn-secondary" id="simball-limpar" type="button">Limpar</button>
-        <button class="btn-primary" id="simball-btn" type="button" disabled>Simular ▶</button>
-      </div>
-    </div>
-    <div class="sim-error" id="simball-error" style="display:none;"></div>
-    <div id="simball-result"></div>
-  </div>
-</div>
 
 </div><!-- /page-geral -->
 
@@ -1252,6 +1242,27 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 </div>
 
 </div><!-- /page-historico -->
+
+<div id="page-simulador" class="page-content" style="display:none;">
+<div class="grid" style="grid-template-columns: 1fr;">
+  <div class="card">
+    <h2>🎱 Simulador de Jogo</h2>
+    <p style="color:var(--muted); font-size:12px; margin-bottom:14px;">
+      Clique nas dezenas para montar seu jogo (6 números de 01 a 50) e veja como ele teria se saído contra as duas rodadas do período selecionado.
+    </p>
+    <div class="simball-grid" id="simball-grid"></div>
+    <div class="simball-footer">
+      <span class="simball-contador" id="simball-contador">0/6 selecionados</span>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-secondary" id="simball-limpar" type="button">Limpar</button>
+        <button class="btn-primary" id="simball-btn" type="button" disabled>Simular ▶</button>
+      </div>
+    </div>
+    <div class="sim-error" id="simball-error" style="display:none;"></div>
+    <div id="simball-result"></div>
+  </div>
+</div>
+</div><!-- /page-simulador -->
 
 <footer>Dados: API oficial Caixa Econômica Federal • {gerado_em}</footer>
 
@@ -2407,6 +2418,7 @@ renderSeletorCascata();
     { tab: 'page-tab-geral', pagina: 'page-geral' },
     { tab: 'page-tab-blocos', pagina: 'page-blocos' },
     { tab: 'page-tab-historico', pagina: 'page-historico' },
+    { tab: 'page-tab-simulador', pagina: 'page-simulador' },
   ];
   paginas.forEach(({ tab, pagina }) => {
     document.getElementById(tab).addEventListener('click', () => {
@@ -3124,18 +3136,49 @@ function duplasenaRenderResultado(r, elId) {
   el.appendChild(finDiv);
 
   if (r.premiados.length) {
+    // resumo por rodada — "Duplo" = concursos que pontuaram nas 2 rodadas
+    const r1 = r.premiados.filter(p => p.rodada === 1);
+    const r2 = r.premiados.filter(p => p.rodada === 2);
+    const concursosR1 = new Set(r1.map(p => p.concurso));
+    const duplo = r2.filter(p => concursosR1.has(p.concurso)).length;
+    const resumoRodadas = document.createElement('div');
+    resumoRodadas.style.cssText = 'font-size:12px; color:var(--text-2); margin-top:10px;';
+    resumoRodadas.textContent = `1ª Rodada: ${r1.length} premiações · 2ª Rodada: ${r2.length} · Duplo: ${duplo}`;
+    el.appendChild(resumoRodadas);
+
     const btnToggle = document.createElement('button');
     btnToggle.className = 'sim-detalhe-toggle';
     btnToggle.style.marginTop = '10px';
     btnToggle.textContent = `Ver em quais concursos pontuou (${r.premiados.length})`;
     const painel = document.createElement('div');
     painel.className = 'sim-detalhe-painel';
-    r.premiados.forEach(p => {
-      const item = document.createElement('span');
-      item.className = 'sim-detalhe-item';
-      item.textContent = `Concurso ${p.concurso} (${p.data}) — ${p.rodada}ª rodada, ${p.acertos} pts`;
-      painel.appendChild(item);
-    });
+
+    // lista compacta: só #concurso e data (sem detalhes de rodada/faixa) — os
+    // 10 mais recentes por padrão, "ver todos" revela o resto
+    const lista = document.createElement('div');
+    lista.className = 'sim-historico';
+    function renderChips(qtd) {
+      lista.innerHTML = '';
+      r.premiados.slice(0, qtd).forEach(p => {
+        const item = document.createElement('div');
+        item.className = 'sim-hist-item';
+        item.innerHTML = `<span class="concurso">#${p.concurso}</span> ${p.data}`;
+        lista.appendChild(item);
+      });
+    }
+    renderChips(10);
+    painel.appendChild(lista);
+    if (r.premiados.length > 10) {
+      const btnMais = document.createElement('button');
+      btnMais.className = 'sim-detalhe-toggle sim-hist-mais';
+      btnMais.textContent = `▼ ver todos (${r.premiados.length})`;
+      btnMais.addEventListener('click', () => {
+        renderChips(r.premiados.length);
+        btnMais.remove();
+      });
+      painel.appendChild(btnMais);
+    }
+
     btnToggle.addEventListener('click', () => {
       painel.classList.toggle('aberto');
       btnToggle.textContent = painel.classList.contains('aberto')
