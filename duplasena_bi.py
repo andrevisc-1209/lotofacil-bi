@@ -397,6 +397,88 @@ def _meta_sorteio_rodada(row: dict, rodada: int) -> dict:
     }
 
 
+# ─── "Meus Jogos" — validador financeiro de jogos fixos ───────────────────────
+# Espelha calc_jogos_lotofacil/calc_jogos_megasena: mesmo padrão de
+# {nome: [6 dezenas]} avaliado contra o histórico, mas verifica as 2 rodadas
+# de cada concurso separadamente (um jogo pode pontuar nas duas do mesmo
+# concurso) — reaproveita as mesmas colunas valor_sena/quina/quadra/terno{1,2}
+# já usadas pelo Simulador de Jogo (bolinhas) em vez de duplicar o mapeamento.
+
+JOGOS_DUPLASENA = {
+    "Jogo 01": [13, 14, 15, 17, 40, 42],
+    "Jogo 02": [13, 14, 15, 17, 46, 48],
+    "Jogo 03": [19, 20, 21, 23, 40, 42],
+    "Jogo 04": [19, 20, 21, 23, 46, 48],
+    "Jogo 05": [16, 18, 37, 38, 39, 41],
+    "Jogo 06": [18, 22, 37, 38, 39, 41],
+    "Jogo 07": [16, 18, 43, 44, 45, 47],
+    "Jogo 08": [18, 22, 43, 44, 45, 47],
+    "Jogo 09": [4, 13, 14, 15, 17, 40],
+    "Jogo 10": [13, 14, 15, 17, 42, 46],
+    "Jogo 11": [19, 20, 21, 23, 40, 48],
+    "Jogo 12": [19, 20, 21, 23, 42, 46],
+    "Jogo 13": [16, 24, 37, 38, 39, 41],
+    "Jogo 14": [18, 22, 37, 38, 39, 41],
+    "Jogo 15": [16, 24, 43, 44, 45, 47],
+    "Jogo 16": [18, 22, 43, 44, 45, 47],
+}
+CUSTO_DUPLASENA = 2.50  # R$ por concurso (uma aposta cobre as 2 rodadas)
+FAIXA_POR_ACERTOS = {6: "sena", 5: "quina", 4: "quadra", 3: "terno"}
+
+def calc_jogos_duplasena(rows_p: list[dict], jogos: dict) -> list[dict]:
+    resultado = []
+    total = len(rows_p)
+    for nome, dezenas in jogos.items():
+        s = set(dezenas)
+        contagem = {"sena": 0, "quina": 0, "quadra": 0, "terno": 0}
+        ganho = 0.0
+        historico = []
+
+        for r in rows_p:
+            d1 = {int(r[f"d{i:02d}"]) for i in range(1, 7)}
+            d2 = {int(r[f"s{i:02d}"]) for i in range(1, 7)}
+            for ac, rodada in ((len(s & d1), 1), (len(s & d2), 2)):
+                faixa = FAIXA_POR_ACERTOS.get(ac)
+                if not faixa:
+                    continue
+                contagem[faixa] += 1
+                premio = _to_float(r.get(f"valor_{faixa}{rodada}")) or 0.0
+                ganho += premio
+                historico.append({
+                    "concurso": _to_int(r["concurso"]),
+                    "data": r.get("data_br") or r["data"],
+                    "rodada": rodada,
+                    "acertos": ac,
+                    "faixa": faixa,
+                    "premio": round(premio, 2),
+                })
+
+        gasto = round(CUSTO_DUPLASENA * total, 2)
+        ganho = round(ganho, 2)
+        saldo = round(ganho - gasto, 2)
+        roi = round(saldo / gasto * 100, 1) if gasto else 0.0
+        premiados = sum(contagem.values())
+        historico.sort(key=lambda h: h["concurso"], reverse=True)
+
+        resultado.append({
+            "nome": nome,
+            "dezenas": sorted(dezenas),
+            "sena": contagem["sena"],
+            "quina": contagem["quina"],
+            "quadra": contagem["quadra"],
+            "terno": contagem["terno"],
+            "premiados": premiados,
+            "pct_premiados": round(premiados / total * 100, 1) if total else 0.0,
+            "gasto": gasto,
+            "ganho": ganho,
+            "saldo": saldo,
+            "roi": roi,
+            "historico": historico,
+        })
+
+    return sorted(resultado, key=lambda x: x["saldo"], reverse=True)
+
+
 # ─── bundle de um período (Todos ou um recorte do seletor) ────────────────────
 
 def calcular_bundle_periodo(rows_p: list[dict]) -> dict:
@@ -441,6 +523,7 @@ def calcular_bundle_periodo(rows_p: list[dict]) -> dict:
         "blocos": calc_blocos_bundle(pool_p),
         "blocos_rodada_nota": calc_blocos_rodada_nota(r1_p, r2_p),
         "financeiro": calc_financeiro(rows_p),
+        "meus_jogos_ds": calc_jogos_duplasena(rows_p, JOGOS_DUPLASENA),
         "sorteios_raw": pool_p,
         "sorteios_meta": sorteios_meta,
     }
@@ -831,6 +914,22 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .hotcold-legend { display: flex; gap: 18px; margin-bottom: 12px; font-size: 12px; color: var(--muted); }
   .money-pos { color: var(--green); font-weight: 700; }
   .money-neg { color: var(--red); font-weight: 700; }
+  .money-mid { color: var(--yellow); font-weight: 700; }
+  /* Meus Jogos (Dupla Sena) — tabela comparativa dentro da aba Simulador */
+  .jogos-resumo-titulo { font-size: 14px; font-weight: 700; color: var(--accent2); margin-bottom: 10px; }
+  .jogos-row { cursor: pointer; }
+  .jogos-row.saldo-pos td { background: rgba(34,197,94,.04); }
+  .jogos-row.saldo-neg td { background: rgba(239,68,68,.04); }
+  .jogos-row:hover td { filter: brightness(1.15); }
+  .jogos-row .jogos-dezenas { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
+  .jogos-detail-row td { padding: 0; border-bottom: 1px solid var(--border); }
+  .jogos-detail-inner { max-height: 0; overflow: hidden; transition: max-height .25s ease; padding: 0 16px; }
+  .jogos-detail-inner.aberto { max-height: 900px; padding: 16px; }
+  .jogos-detail-titulo { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-3); margin-bottom: 10px; }
+  .jogos-hist-chip { display: inline-flex; align-items: center; gap: 5px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 4px 10px; font-size: 11px; font-family: var(--font-mono); color: var(--text-2); margin: 2px 6px 2px 0; }
+  .jogos-hist-chip .rodada-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .jogos-hist-chip .rodada-dot.r1 { background: #a78bfa; }
+  .jogos-hist-chip .rodada-dot.r2 { background: #60a5fa; }
   /* comparativo 1ª x 2ª rodada — a identidade da Dupla Sena */
   .comp-rodadas-stats { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 16px; font-size: 12px; color: var(--muted); }
   .comp-rodadas-stats b { color: var(--text); font-size: 16px; display: block; font-family: var(--font-mono); }
@@ -1260,6 +1359,17 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     </div>
     <div class="sim-error" id="simball-error" style="display:none;"></div>
     <div id="simball-result"></div>
+  </div>
+</div>
+
+<div class="grid" style="grid-template-columns: 1fr;">
+  <div class="card">
+    <h2>🎫 Meus Jogos</h2>
+    <p style="color:var(--muted); font-size:12px; margin-bottom:12px;">
+      16 jogos fixos avaliados contra o período ativo (as 2 rodadas de cada concurso). Clique numa linha para ver o histórico de premiações.
+    </p>
+    <div id="ds-jogos-resumo"></div>
+    <div id="ds-jogos-tabela-wrap" style="overflow-x:auto; margin-top:14px;"></div>
   </div>
 </div>
 </div><!-- /page-simulador -->
@@ -2120,6 +2230,59 @@ function aplicarFiltroNumeros() {
 }
 
 // ── função central: aplica um período a TODOS os elementos do dashboard ─────
+const CUSTO_DUPLASENA_JS = 2.50;
+const CAMPO_FAIXA_DUPLASENA_JS = { 6: 'valor_sena', 5: 'valor_quina', 4: 'valor_quadra', 3: 'valor_terno' };
+
+// ── "Meus Jogos" (Dupla Sena) — espelho JS de calc_jogos_duplasena (Python),
+// usado só na mesclagem multi-ano client-side. Reaproveita CAMPO_FAIXA_
+// DUPLASENA_JS (mesmo mapeamento acertos→campo de valor por rodada usado
+// pelo Simulador de Jogo, mais abaixo no arquivo) pra não duplicar a lógica.
+const JOGOS_DUPLASENA_JS = {
+  'Jogo 01': [13, 14, 15, 17, 40, 42], 'Jogo 02': [13, 14, 15, 17, 46, 48],
+  'Jogo 03': [19, 20, 21, 23, 40, 42], 'Jogo 04': [19, 20, 21, 23, 46, 48],
+  'Jogo 05': [16, 18, 37, 38, 39, 41], 'Jogo 06': [18, 22, 37, 38, 39, 41],
+  'Jogo 07': [16, 18, 43, 44, 45, 47], 'Jogo 08': [18, 22, 43, 44, 45, 47],
+  'Jogo 09': [4, 13, 14, 15, 17, 40],  'Jogo 10': [13, 14, 15, 17, 42, 46],
+  'Jogo 11': [19, 20, 21, 23, 40, 48], 'Jogo 12': [19, 20, 21, 23, 42, 46],
+  'Jogo 13': [16, 24, 37, 38, 39, 41], 'Jogo 14': [18, 22, 37, 38, 39, 41],
+  'Jogo 15': [16, 24, 43, 44, 45, 47], 'Jogo 16': [18, 22, 43, 44, 45, 47],
+};
+
+function calcJogosDuplasenaJS(sorteiosRaw, sorteiosMeta, jogos) {
+  const totalConcursos = sorteiosRaw.length / 2;
+  const resultado = Object.entries(jogos).map(([nome, dezenas]) => {
+    const aposta = new Set(dezenas);
+    const contagem = { sena: 0, quina: 0, quadra: 0, terno: 0 };
+    const historico = [];
+    let ganho = 0;
+    sorteiosRaw.forEach((s, i) => {
+      const acertos = s.filter(d => aposta.has(d)).length;
+      const campo = CAMPO_FAIXA_DUPLASENA_JS[acertos];
+      if (!campo) return;
+      const meta = sorteiosMeta[i];
+      if (!meta) return;
+      const faixa = campo.replace('valor_', '');
+      contagem[faixa]++;
+      const premio = meta[campo] || 0;
+      ganho += premio;
+      historico.push({ concurso: meta.concurso, data: meta.data, rodada: meta.rodada, acertos, faixa, premio: +premio.toFixed(2) });
+    });
+    historico.sort((a, b) => b.concurso - a.concurso);
+    const gasto = +(CUSTO_DUPLASENA_JS * totalConcursos).toFixed(2);
+    ganho = +ganho.toFixed(2);
+    const saldo = +(ganho - gasto).toFixed(2);
+    const roi = gasto ? +(saldo / gasto * 100).toFixed(1) : 0;
+    const premiados = contagem.sena + contagem.quina + contagem.quadra + contagem.terno;
+    return {
+      nome, dezenas: [...dezenas].sort((a, b) => a - b),
+      sena: contagem.sena, quina: contagem.quina, quadra: contagem.quadra, terno: contagem.terno,
+      premiados, pct_premiados: totalConcursos ? +(premiados / totalConcursos * 100).toFixed(1) : 0,
+      gasto, ganho, saldo, roi, historico,
+    };
+  });
+  return resultado.sort((a, b) => b.saldo - a.saldo);
+}
+
 let periodoAtualId = '__todos__';
 let historicoInicializado = false;
 let modoMultiAno = false;
@@ -2150,6 +2313,7 @@ function aplicarPeriodo(periodoId) {
   renderBannerPeriodo(periodoId, bundle);
   renderBlocosMensal(periodoId);
   aplicarFiltroPeriodoHistorico(periodoId);
+  renderMeusJogosDS(bundle, periodoId);
 }
 
 // ── mesclagem client-side de múltiplos anos selecionados (Melhoria 2) ────────
@@ -2176,6 +2340,7 @@ function calcularBundleCompletoJS(sorteiosRaw, sorteiosMeta) {
     blocos: calcBlocosJS(sorteiosRaw),
     blocos_rodada_nota: calcBlocosRodadaNotaJS(r1List, r2List),
     financeiro: calcFinanceiroJS(sorteiosMeta),
+    meus_jogos_ds: calcJogosDuplasenaJS(sorteiosRaw, sorteiosMeta, JOGOS_DUPLASENA_JS),
     sorteios_raw: sorteiosRaw,
     sorteios_meta: sorteiosMeta,
   };
@@ -2232,6 +2397,7 @@ function aplicarPeriodoMultiAno(anos) {
   renderBannerPeriodoMulti(anos, bundleAtualMerged);
   renderBlocosMensalMulti(anos);
   aplicarFiltroPeriodoHistoricoMulti(anos);
+  renderMeusJogosDS(bundleAtualMerged, periodoAtualId);
 }
 
 // ── seletor de período cascateado: Ano(s) — multi-select (sempre visível) →
@@ -3067,9 +3233,12 @@ if (DATA.meta.supabase) {
 // prêmio de cada faixa (3/4/5/6 acertos) já vem pronto por rodada em
 // sorteios_meta (valor_sena/quina/quadra/terno — ver _meta_sorteio_rodada no
 // Python). Custo é por CONCURSO (uma aposta cobre as 2 rodadas), não por
-// sorteio individual — por isso divide sorteiosRaw.length por 2. ───────────
-const CUSTO_DUPLASENA_JS = 2.50;
-const CAMPO_FAIXA_DUPLASENA_JS = { 6: 'valor_sena', 5: 'valor_quina', 4: 'valor_quadra', 3: 'valor_terno' };
+// sorteio individual — por isso divide sorteiosRaw.length por 2.
+// CUSTO_DUPLASENA_JS/CAMPO_FAIXA_DUPLASENA_JS/JOGOS_DUPLASENA_JS/
+// calcJogosDuplasenaJS ficam declarados mais acima no arquivo (antes de
+// aplicarPeriodo), porque aplicarPeriodo já roda no carregamento inicial da
+// página — se esses const ficassem só aqui embaixo, o load inicial cairia
+// numa TDZ (ReferenceError: Cannot access before initialization). ───────────
 
 function duplasenaSimularJogo(numeros, sorteiosRaw, sorteiosMeta) {
   const aposta = new Set(numeros);
@@ -3188,6 +3357,144 @@ function duplasenaRenderResultado(r, elId) {
     el.appendChild(btnToggle);
     el.appendChild(painel);
   }
+}
+
+// ── "Meus Jogos" — tabela comparativa dos 16 jogos fixos (JOGOS_DUPLASENA no
+// Python), reagindo ao período ativo igual ao resto do dashboard. O cálculo
+// (ganho/gasto/saldo/ROI/histórico por rodada) já vem pronto em
+// bundle.meus_jogos_ds (Python) ou calcJogosDuplasenaJS (JS, multi-ano) —
+// aqui só ordena por saldo e desenha. ────────────────────────────────────────
+
+function labelPeriodoDS(periodoId) {
+  if (periodoId === '__todos__') return 'Todos os concursos';
+  if (periodoId.startsWith('MULTI:')) return periodoId.slice(6).split(',').join(' + ');
+  const info = (DATA.periodos_disponiveis || []).find(p => p.id === periodoId);
+  return info ? info.label : periodoId;
+}
+
+function roiClasseDS(roi) {
+  if (roi >= 0) return 'money-pos';
+  if (roi >= -20) return 'money-mid';
+  return 'money-neg';
+}
+
+function renderMeusJogosDSResumo(jogos, nConcursos, periodoLabel) {
+  const el = document.getElementById('ds-jogos-resumo');
+  const gastoTotal = +jogos.reduce((a, j) => a + j.gasto, 0).toFixed(2);
+  const ganhoTotal = +jogos.reduce((a, j) => a + j.ganho, 0).toFixed(2);
+  const saldoTotal = +(ganhoTotal - gastoTotal).toFixed(2);
+  const roiTotal = gastoTotal ? +(saldoTotal / gastoTotal * 100).toFixed(1) : 0;
+  el.innerHTML = `
+    <div class="jogos-resumo-titulo">${jogos.length} jogos · ${formatarMoeda(CUSTO_DUPLASENA_JS)} por concurso (cobre as 2 rodadas) · Período ativo: ${periodoLabel}</div>
+    <div class="mini-stats">
+      <div>Concursos no período<b>${nConcursos}</b></div>
+      <div>Total apostado (16 jogos)<b>${formatarMoeda(gastoTotal)}</b></div>
+      <div>Total ganho<b>${formatarMoeda(ganhoTotal)}</b></div>
+      <div>Saldo<b class="${saldoTotal >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(saldoTotal)}</b></div>
+      <div>ROI médio<b class="${roiClasseDS(roiTotal)}">${formatarPct(roiTotal)}</b></div>
+    </div>`;
+}
+
+function construirDetalheJogoDS(container, jogo) {
+  const titulo = document.createElement('div');
+  titulo.className = 'jogos-detail-titulo';
+  titulo.textContent = `Concursos premiados (${jogo.historico.length})`;
+  container.appendChild(titulo);
+  if (!jogo.historico.length) {
+    const p = document.createElement('p');
+    p.style.cssText = 'color:var(--muted); font-size:12px;';
+    p.textContent = 'Nenhum concurso premiado neste período.';
+    container.appendChild(p);
+    return;
+  }
+  const lista = document.createElement('div');
+  lista.className = 'sim-historico';
+  const MOSTRAR = 10;
+  function renderChips(mostrarTodos) {
+    lista.innerHTML = '';
+    const itens = mostrarTodos ? jogo.historico : jogo.historico.slice(0, MOSTRAR);
+    itens.forEach(h => {
+      const chip = document.createElement('span');
+      chip.className = 'jogos-hist-chip';
+      chip.innerHTML = `<span class="rodada-dot r${h.rodada}"></span>#${h.concurso} ${h.data} · ${h.acertos}ac · ${formatarMoeda(h.premio)}`;
+      lista.appendChild(chip);
+    });
+    if (!mostrarTodos && jogo.historico.length > MOSTRAR) {
+      const btnMais = document.createElement('button');
+      btnMais.className = 'sim-detalhe-toggle sim-hist-mais';
+      btnMais.textContent = `▼ ver todos (${jogo.historico.length})`;
+      btnMais.addEventListener('click', () => renderChips(true));
+      container.appendChild(btnMais);
+    }
+  }
+  container.appendChild(lista);
+  renderChips(false);
+}
+
+function renderMeusJogosDSTabela(jogos) {
+  const wrap = document.getElementById('ds-jogos-tabela-wrap');
+  wrap.innerHTML = '';
+  const ordenados = [...jogos].sort((a, b) => b.saldo - a.saldo);
+
+  const table = document.createElement('table');
+  table.innerHTML = '<thead><tr><th>Jogo</th><th>Dezenas</th><th>6ac</th><th>5ac</th><th>4ac</th><th>3ac</th><th>Premiados</th><th>%</th><th>Gasto</th><th>Ganho</th><th>Saldo</th><th>ROI</th></tr></thead>';
+  const tbody = document.createElement('tbody');
+
+  ordenados.forEach(jogo => {
+    const tr = document.createElement('tr');
+    tr.className = 'jogos-row ' + (jogo.saldo >= 0 ? 'saldo-pos' : 'saldo-neg');
+    const dezenasTxt = jogo.dezenas.map(n => String(n).padStart(2, '0')).join(' ');
+    tr.innerHTML = `
+      <td>${jogo.nome}</td>
+      <td class="jogos-dezenas">${dezenasTxt}</td>
+      <td>${jogo.sena}</td>
+      <td>${jogo.quina}</td>
+      <td>${jogo.quadra}</td>
+      <td>${jogo.terno}</td>
+      <td>${jogo.premiados}</td>
+      <td>${formatarPct(jogo.pct_premiados)}</td>
+      <td>${formatarMoeda(jogo.gasto)}</td>
+      <td>${formatarMoeda(jogo.ganho)}</td>
+      <td class="${jogo.saldo >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(jogo.saldo)}</td>
+      <td class="${roiClasseDS(jogo.roi)}">${formatarPct(jogo.roi)}</td>`;
+    tbody.appendChild(tr);
+
+    const trDetail = document.createElement('tr');
+    trDetail.className = 'jogos-detail-row';
+    const tdDetail = document.createElement('td');
+    tdDetail.colSpan = 12;
+    const inner = document.createElement('div');
+    inner.className = 'jogos-detail-inner';
+    tdDetail.appendChild(inner);
+    trDetail.appendChild(tdDetail);
+    tbody.appendChild(trDetail);
+
+    let construido = false;
+    tr.addEventListener('click', () => {
+      const aberto = inner.classList.contains('aberto');
+      if (!aberto && !construido) {
+        construirDetalheJogoDS(inner, jogo);
+        construido = true;
+      }
+      inner.classList.toggle('aberto', !aberto);
+    });
+  });
+
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+}
+
+function renderMeusJogosDS(bundle, periodoId) {
+  const jogos = bundle.meus_jogos_ds;
+  const resumoEl = document.getElementById('ds-jogos-resumo');
+  const tabelaEl = document.getElementById('ds-jogos-tabela-wrap');
+  if (!jogos || !jogos.length) {
+    resumoEl.innerHTML = '<p style="color:var(--muted)">Nenhum jogo configurado.</p>';
+    tabelaEl.innerHTML = '';
+    return;
+  }
+  renderMeusJogosDSResumo(jogos, bundle.meta.total_concursos, labelPeriodoDS(periodoId));
+  renderMeusJogosDSTabela(jogos);
 }
 
 {
