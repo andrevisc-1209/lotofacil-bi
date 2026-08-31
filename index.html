@@ -27,6 +27,9 @@
     --accent-megasena:  #10b981; --accent-megasena-2:  #34d399;
     --accent-lotomania: #d97706; --accent-lotomania-2: #fbbf24;
     --accent-duplasena: #e11d48; --accent-duplasena-2: #fb7185;
+
+    --accent: #7c6af7;
+    --red: #ef4444;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -81,9 +84,77 @@
   .duplasena .menu-card-btn { background: var(--accent-duplasena); }
 
   footer { margin-top: 36px; color: var(--text-3); font-size: 11px; }
+
+  /* tela de senha */
+  #telaLogin-inner {
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg0);
+  }
+  #telaLogin-card {
+    background: var(--bg1);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: 48px 40px;
+    width: 100%;
+    max-width: 360px;
+    text-align: center;
+  }
+  #telaLogin-card .icone { font-size: 36px; margin-bottom: 12px; }
+  #telaLogin-card h2 { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  #telaLogin-card .sub { font-size: 13px; color: var(--text-3); margin-bottom: 28px; }
+  #inputSenha {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 12px 16px;
+    font-size: 14px;
+    color: var(--text);
+    outline: none;
+    margin-bottom: 12px;
+    font-family: var(--font);
+  }
+  #inputSenha:focus { border-color: var(--accent); }
+  #erroSenha { color: var(--red); font-size: 12px; margin-bottom: 10px; display: none; }
+  #btnEntrar {
+    width: 100%;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--r-md);
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font);
+  }
+  #btnEntrar:hover { opacity: .92; }
 </style>
 </head>
 <body>
+
+<!-- Tela de senha -->
+<div id="telaLogin" style="display:none;">
+  <div id="telaLogin-inner">
+    <div id="telaLogin-card">
+      <div class="icone">🎰</div>
+      <h2>Loterias BI</h2>
+      <p class="sub">Acesso restrito</p>
+
+      <input type="password" id="inputSenha" placeholder="Digite a senha" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter') verificarSenha()">
+
+      <div id="erroSenha">Senha incorreta. Tente novamente.</div>
+
+      <button id="btnEntrar" onclick="verificarSenha()">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Menu principal (oculto até autenticar) -->
+<div id="menuPrincipal" style="display:none;">
 <div class="wrap">
   <h1>🎰 Loterias BI</h1>
   <div class="sub">Análise estatística · Histórico completo — dados oficiais da Caixa</div>
@@ -119,6 +190,7 @@
   </div>
   <footer>Dados atualizados automaticamente pela Caixa</footer>
 </div>
+</div><!-- /menuPrincipal -->
 <script>
 const SUPABASE_URL = 'https://rlkxckpybhtmtiznsmod.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsa3hja3B5Ymh0bXRpem5zbW9kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1MjYyNjMsImV4cCI6MjEwMTEwMjI2M30.H1CL0EQsSPw0DsP6eBImQuL3rdrH_Hy4wgw94shAQA0';
@@ -146,6 +218,35 @@ contarSorteios('sorteios', 'menu-total-lotofacil');
 contarSorteios('megasena_sorteios', 'menu-total-megasena');
 contarSorteios('lotomania_sorteios', 'menu-total-lotomania');
 contarSorteios('duplasena_sorteios', 'menu-total-duplasena');
+</script>
+
+<!-- Autenticação (client-side apenas — ver aviso no início do arquivo:
+     qualquer pessoa com acesso ao código-fonte consegue ler a senha. Serve
+     pra uso pessoal/controle de acesso casual, não pra dados sensíveis. -->
+<script>
+  const SENHA_ACESSO = 'SeuIriri2026';
+
+  function verificarSenha() {
+    const input = document.getElementById('inputSenha').value;
+    if (input === SENHA_ACESSO) {
+      localStorage.setItem('loterias_auth', 'ok');
+      document.getElementById('telaLogin').style.display = 'none';
+      document.getElementById('menuPrincipal').style.display = 'block';
+    } else {
+      document.getElementById('erroSenha').style.display = 'block';
+      document.getElementById('inputSenha').value = '';
+      document.getElementById('inputSenha').focus();
+    }
+  }
+
+  if (localStorage.getItem('loterias_auth') === 'ok') {
+    document.getElementById('telaLogin').style.display = 'none';
+    document.getElementById('menuPrincipal').style.display = 'block';
+  } else {
+    document.getElementById('telaLogin').style.display = 'block';
+    document.getElementById('menuPrincipal').style.display = 'none';
+    document.getElementById('inputSenha').focus();
+  }
 </script>
 </body>
 </html>

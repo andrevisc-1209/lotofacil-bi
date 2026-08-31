@@ -827,6 +827,37 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     .numgrid-cell { font-size: 10px; }
     .numgrid-footer { flex-direction: column; align-items: stretch; }
   }
+  /* simulador de aposta por texto (jogos de 6 a 15 dezenas) */
+  .sim-instrucao { font-size: 12px; color: var(--text-3); margin-bottom: 14px; }
+  .sim-box { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .sim-box input { flex: 1; min-width: 260px; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 9px 12px; color: var(--text); font-size: 13px; }
+  .sim-box input:focus { outline: none; border-color: var(--accent); }
+  .sim-qtd-selector { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; font-size: 13px; }
+  .sim-qtd-selector label { display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--text); }
+  .sim-qtd-label { font-weight: 700; color: var(--text-3); text-transform: uppercase; font-size: 11px; letter-spacing: .5px; }
+  .sim-jogos-lista { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .sim-jogo-row { display: flex; align-items: center; gap: 8px; }
+  .sim-jogo-label { width: 62px; flex-shrink: 0; font-size: 12px; color: var(--text-3); font-weight: 600; }
+  .sim-jogo-input { flex: 1; min-width: 0; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 8px 12px; color: var(--text); font-size: 13px; font-family: var(--font-mono); }
+  .sim-jogo-input:focus { outline: none; border-color: var(--accent); }
+  .sim-jogo-input.erro { border-color: var(--red); }
+  .sim-jogo-badge { min-width: 96px; text-align: center; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: var(--r-sm); flex-shrink: 0; border: 1px solid var(--border); color: var(--text-3); }
+  .sim-jogo-badge.ok { background: rgba(34,197,94,.15); color: var(--green); border-color: rgba(34,197,94,.4); }
+  .sim-jogo-badge.parcial { background: rgba(245,158,11,.15); color: var(--gold); border-color: rgba(245,158,11,.4); }
+  .sim-jogo-badge.erro { background: rgba(239,68,68,.15); color: var(--red); border-color: rgba(239,68,68,.4); }
+  .sim-jogo-remove { background: transparent; border: 1px solid var(--border); border-radius: var(--r-sm); padding: 6px 10px; cursor: pointer; color: var(--text-3); font-size: 13px; flex-shrink: 0; }
+  .sim-jogo-remove:hover { border-color: var(--red); color: var(--red); }
+  .sim-acoes { display: flex; gap: 10px; margin-bottom: 14px; }
+  .sim-acoes button { background: var(--accent); border: none; border-radius: var(--r-sm); padding: 9px 18px; color: #fff; font-weight: 600; cursor: pointer; font-size: 13px; }
+  .sim-acoes button:hover { background: var(--accent3-crimson); }
+  .sim-acoes #sim-btn-add { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .sim-acoes #sim-btn-add:hover { border-color: var(--accent); color: var(--accent2); }
+  .sim-aviso { color: var(--gold); font-size: 12px; margin-bottom: 10px; }
+  .sim-compare-row { cursor: default; }
+  .sim-compare-row.destaque-ouro td { background: rgba(245,158,11,.12); }
+  .sim-trofeu { margin-left: 4px; }
+  .sim-copiar-btn { margin-top: 12px; background: transparent; border: 1px solid var(--border); border-radius: var(--r-sm); padding: 8px 16px; color: var(--text); cursor: pointer; font-size: 12px; }
+  .sim-copiar-btn:hover { border-color: var(--accent); color: var(--accent2); }
   /* simulador de jogo — seleção visual por bolinhas */
   .simball-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 8px; margin-bottom: 16px; }
   .simball-cell {
@@ -1343,6 +1374,34 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 </div><!-- /page-historico -->
 
 <div id="page-simulador" class="page-content" style="display:none;">
+<div class="grid" style="grid-template-columns: 1fr;">
+  <div class="card">
+    <h2>🎰 Simulador de Aposta</h2>
+    <p class="sim-instrucao">
+      Aceita de 6 a 15 números por jogo (aposta múltipla) — separados por espaço, vírgula, ponto e vírgula, traço, ponto, ou qualquer mistura (ex: "01, 02 05-06;07").
+    </p>
+
+    <div class="sim-qtd-selector" id="sim-qtd-selector">
+      <span class="sim-qtd-label">Simular</span>
+      <label><input type="radio" name="sim-qtd" value="1" checked> 1 jogo</label>
+      <label><input type="radio" name="sim-qtd" value="5"> 5 jogos</label>
+      <label><input type="radio" name="sim-qtd" value="10"> 10 jogos</label>
+      <label><input type="radio" name="sim-qtd" value="15"> 15 jogos</label>
+      <label><input type="radio" name="sim-qtd" value="30"> 30 jogos</label>
+    </div>
+
+    <div id="sim-jogos-lista" class="sim-jogos-lista"></div>
+
+    <div class="sim-acoes">
+      <button id="sim-btn-add" type="button">➕ Adicionar jogo</button>
+      <button id="sim-btn" type="button">Verificar</button>
+    </div>
+
+    <div class="sim-error" id="sim-error" style="display:none;"></div>
+    <div id="sim-result"></div>
+  </div>
+</div>
+
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card">
     <h2>🎱 Simulador de Jogo</h2>
@@ -2314,6 +2373,7 @@ function aplicarPeriodo(periodoId) {
   renderBlocosMensal(periodoId);
   aplicarFiltroPeriodoHistorico(periodoId);
   renderMeusJogosDS(bundle, periodoId);
+  avisarSimTextoPeriodoMudou();
 }
 
 // ── mesclagem client-side de múltiplos anos selecionados (Melhoria 2) ────────
@@ -2398,6 +2458,7 @@ function aplicarPeriodoMultiAno(anos) {
   renderBlocosMensalMulti(anos);
   aplicarFiltroPeriodoHistoricoMulti(anos);
   renderMeusJogosDS(bundleAtualMerged, periodoAtualId);
+  avisarSimTextoPeriodoMudou();
 }
 
 // ── seletor de período cascateado: Ano(s) — multi-select (sempre visível) →
@@ -3240,26 +3301,56 @@ if (DATA.meta.supabase) {
 // página — se esses const ficassem só aqui embaixo, o load inicial cairia
 // numa TDZ (ReferenceError: Cannot access before initialization). ───────────
 
+// combinação simples n!/(r!(n-r)!) — 0 se r<0 ou r>n (evita NaN nos casos de
+// borda usados por duplasenaSimularJogo abaixo).
+function comb(n, r) {
+  if (r < 0 || r > n) return 0;
+  r = Math.min(r, n - r);
+  let resultado = 1;
+  for (let i = 0; i < r; i++) resultado = resultado * (n - i) / (i + 1);
+  return Math.round(resultado);
+}
+
+// Aceita apostas de 6 a 15 dezenas (bolão) — não só o jogo simples de 6 do
+// Simulador de Jogo (bolinhas) acima. Um bolão de n dezenas equivale a
+// comprar TODAS as C(n,6) combinações simples de 6 dentro dele, então um
+// mesmo sorteio pode pagar a MESMA faixa várias vezes simultaneamente (ex:
+// acertar 5 das 6 dezenas sorteadas com uma aposta de 10 números paga a
+// quina uma vez pra cada combinação de 6 do bolão que contém essas 5 certas
+// + 1 das outras 4 erradas = C(5,5)*C(4,1) = 4 quinas). A fórmula geral:
+// sendo w = quantas das minhas dezenas saíram no sorteio e m = quantas não
+// saíram (m = n - w), o número de combinações do meu bolão que acertam
+// exatamente k dezenas é C(w,k)*C(m,6-k). Pra n=6 (jogo simples) isso se
+// reduz exatamente ao comportamento antigo (sempre 0 ou 1 ocorrência por
+// faixa) — generalização é 100% compatível com o Simulador de Jogo acima,
+// que sempre chama esta função com exatamente 6 números.
 function duplasenaSimularJogo(numeros, sorteiosRaw, sorteiosMeta) {
   const aposta = new Set(numeros);
+  const n = numeros.length;
   const pontos = { 1: { 3: 0, 4: 0, 5: 0, 6: 0 }, 2: { 3: 0, 4: 0, 5: 0, 6: 0 } };
   const premiados = [];
   let ganho = 0;
   sorteiosRaw.forEach((s, i) => {
-    const acertos = s.filter(d => aposta.has(d)).length;
-    if (acertos < 3) return;
+    const w = s.filter(d => aposta.has(d)).length;
+    const m = n - w;
     const meta = sorteiosMeta[i];
     if (!meta) return;
     const rodada = meta.rodada;
-    pontos[rodada][acertos]++;
-    const campo = CAMPO_FAIXA_DUPLASENA_JS[acertos];
-    const premio = meta[campo] || 0;
-    ganho += premio;
-    premiados.push({ concurso: meta.concurso, data: meta.data, rodada, acertos, premio: +premio.toFixed(2) });
+    [6, 5, 4, 3].forEach(k => {
+      const vezes = comb(w, k) * comb(m, 6 - k);
+      if (!vezes) return;
+      pontos[rodada][k] += vezes;
+      const campo = CAMPO_FAIXA_DUPLASENA_JS[k];
+      const premioUnitario = meta[campo] || 0;
+      const premio = premioUnitario * vezes;
+      ganho += premio;
+      premiados.push({ concurso: meta.concurso, data: meta.data, rodada, acertos: k, vezes, premio: +premio.toFixed(2) });
+    });
   });
   premiados.sort((a, b) => b.concurso - a.concurso);
   const totalConcursos = sorteiosRaw.length / 2;
-  const custo = +(CUSTO_DUPLASENA_JS * totalConcursos).toFixed(2);
+  const custoPorConcurso = comb(n, 6) * CUSTO_DUPLASENA_JS;
+  const custo = +(custoPorConcurso * totalConcursos).toFixed(2);
   ganho = +ganho.toFixed(2);
   const saldo = +(ganho - custo).toFixed(2);
   const roi = custo ? +(saldo / custo * 100).toFixed(1) : 0;
@@ -3357,6 +3448,343 @@ function duplasenaRenderResultado(r, elId) {
     el.appendChild(btnToggle);
     el.appendChild(painel);
   }
+}
+
+function avisarSimTextoPeriodoMudou() {
+  const el = document.getElementById('sim-result');
+  if (el && el.innerHTML) {
+    el.innerHTML = '<p class="sim-aviso" style="margin:0;">Período alterado — clique em "Verificar" novamente pra recalcular.</p>';
+  }
+}
+
+// ── Simulador de Aposta (texto) — aceita jogos de 6 a 15 dezenas (bolão),
+// vários jogos de uma vez (1/5/10/15/30 pré-definidos + "adicionar jogo" até
+// 30). Reaproveita comb()/duplasenaSimularJogo() acima (já generalizados pra
+// bolão) — aqui só cuida da UI: parsing flexível, validação em tempo real,
+// lista dinâmica de campos, e dois modos de exibição do resultado (1 jogo =
+// detalhado, 2+ = tabela comparativa clicável). ────────────────────────────
+
+function parseDezenasBrutas(texto) {
+  // mantém tudo (mesmo inválido) pra validação em tempo real conseguir
+  // sinalizar números fora do intervalo em vez de simplesmente ignorá-los
+  return texto.split(/[\s,;.\-]+/).map(s => s.trim()).filter(s => s.length > 0).map(Number);
+}
+
+function validarJogoTextoDS(texto) {
+  const brutas = parseDezenasBrutas(texto);
+  if (!brutas.length) return { status: 'vazio', validos: [] };
+  const foraDeRange = brutas.some(n => !Number.isInteger(n) || n < 1 || n > 50);
+  const validos = brutas.filter(n => Number.isInteger(n) && n >= 1 && n <= 50);
+  const repetidos = new Set(validos).size !== validos.length;
+  if (foraDeRange || repetidos) return { status: 'erro', validos };
+  if (validos.length < 6) return { status: 'parcial', validos };
+  if (validos.length > 15) return { status: 'erro', validos };
+  return { status: 'ok', validos };
+}
+
+function duplasenaRenderChipsTxt(container, premiados) {
+  container.innerHTML = '';
+  if (!premiados.length) {
+    const p = document.createElement('p');
+    p.style.cssText = 'color:var(--text-3); font-size:12px; margin:0;';
+    p.textContent = 'Nenhuma premiação no período.';
+    container.appendChild(p);
+    return;
+  }
+  const lista = document.createElement('div');
+  lista.className = 'sim-historico';
+  function renderChips(qtd) {
+    lista.innerHTML = '';
+    premiados.slice(0, qtd).forEach(p => {
+      const chip = document.createElement('span');
+      chip.className = 'jogos-hist-chip';
+      const vezesTxt = p.vezes > 1 ? ` ×${p.vezes}` : '';
+      chip.innerHTML = `<span class="rodada-dot r${p.rodada}"></span>#${p.concurso} ${p.data} · ${p.rodada}ª · ${p.acertos}ac${vezesTxt} · ${formatarMoeda(p.premio)}`;
+      lista.appendChild(chip);
+    });
+  }
+  renderChips(10);
+  container.appendChild(lista);
+  if (premiados.length > 10) {
+    const btnMais = document.createElement('button');
+    btnMais.className = 'sim-detalhe-toggle sim-hist-mais';
+    btnMais.textContent = `▼ ver todos (${premiados.length})`;
+    btnMais.addEventListener('click', () => { renderChips(premiados.length); btnMais.remove(); });
+    container.appendChild(btnMais);
+  }
+}
+
+function duplasenaRenderUnicoTxt(r, el) {
+  const dezenasTxt = [...r.numeros].sort((a, b) => a - b).map(n => String(n).padStart(2, '0')).join(' · ');
+  const titulo = document.createElement('div');
+  titulo.style.cssText = 'font-weight:700; margin-bottom:10px;';
+  titulo.textContent = `Jogo (${r.numeros.length} dezenas): ${dezenasTxt}`;
+  el.appendChild(titulo);
+
+  [1, 2].forEach(rodada => {
+    const label = document.createElement('div');
+    label.className = 'dsim-rodada-titulo';
+    label.textContent = `${rodada}ª Rodada`;
+    el.appendChild(label);
+    const table = document.createElement('table');
+    table.innerHTML = `<thead><tr><th>Faixa</th><th>Vezes que ocorreu</th></tr></thead>`;
+    const tbody = document.createElement('tbody');
+    [6, 5, 4, 3].forEach(p => {
+      const tr = document.createElement('tr');
+      const nomes = { 6: 'Sena (6 acertos)', 5: 'Quina (5 acertos)', 4: 'Quadra (4 acertos)', 3: 'Terno (3 acertos)' };
+      tr.innerHTML = `<td class="pontos">${nomes[p]}</td><td>${r.pontos[rodada][p]}</td>`;
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    el.appendChild(table);
+  });
+
+  const finDiv = document.createElement('div');
+  finDiv.className = 'mini-stats';
+  finDiv.innerHTML = `
+    <div>Concursos no período<b>${r.totalConcursos}</b></div>
+    <div>Custo total<b>${formatarMoeda(r.custo)}</b></div>
+    <div>Ganho estimado<b>${formatarMoeda(r.ganho)}</b></div>
+    <div>Saldo<b class="${r.saldo >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(r.saldo)}</b></div>
+    <div>ROI<b class="${r.roi >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(r.roi)}</b></div>`;
+  el.appendChild(finDiv);
+
+  const r1 = r.premiados.filter(p => p.rodada === 1);
+  const r2 = r.premiados.filter(p => p.rodada === 2);
+  const concursosR1 = new Set(r1.map(p => p.concurso));
+  const duplo = r2.filter(p => concursosR1.has(p.concurso)).length;
+  const resumoRodadas = document.createElement('div');
+  resumoRodadas.style.cssText = 'font-size:12px; color:var(--text-2); margin-top:10px;';
+  resumoRodadas.textContent = `1ª Rodada: ${r1.length} premiações · 2ª Rodada: ${r2.length} · Duplo: ${duplo}`;
+  el.appendChild(resumoRodadas);
+
+  const btnToggle = document.createElement('button');
+  btnToggle.className = 'sim-detalhe-toggle';
+  btnToggle.style.marginTop = '10px';
+  btnToggle.textContent = `Ver em quais concursos pontuou (${r.premiados.length})`;
+  const painel = document.createElement('div');
+  painel.className = 'sim-detalhe-painel';
+  duplasenaRenderChipsTxt(painel, r.premiados);
+  btnToggle.addEventListener('click', () => {
+    painel.classList.toggle('aberto');
+    btnToggle.textContent = painel.classList.contains('aberto')
+      ? 'Esconder concursos'
+      : `Ver em quais concursos pontuou (${r.premiados.length})`;
+  });
+  el.appendChild(btnToggle);
+  el.appendChild(painel);
+}
+
+function duplasenaRenderComparativoTxt(resultados, el) {
+  const maxPremios = Math.max(...resultados.map(r => r.premiados.length));
+  const table = document.createElement('table');
+  table.innerHTML = `<thead><tr><th>Jogo</th><th>Dezenas</th><th>6ac</th><th>5ac</th><th>4ac</th><th>3ac</th><th>Premiados</th><th>Gasto</th><th>Ganho</th><th>Saldo</th><th>ROI</th></tr></thead>`;
+  const tbody = document.createElement('tbody');
+
+  resultados.forEach((r, i) => {
+    const dezenasTxt = [...r.numeros].sort((a, b) => a - b).map(n => String(n).padStart(2, '0')).join(' ');
+    const c6 = r.pontos[1][6] + r.pontos[2][6];
+    const c5 = r.pontos[1][5] + r.pontos[2][5];
+    const c4 = r.pontos[1][4] + r.pontos[2][4];
+    const c3 = r.pontos[1][3] + r.pontos[2][3];
+    const destaque = r.premiados.length === maxPremios && maxPremios > 0;
+    const trofeu = destaque ? '<span class="sim-trofeu" title="Mais premiações entre os jogos simulados">🏆</span>' : '';
+
+    const tr = document.createElement('tr');
+    tr.className = 'jogos-row sim-compare-row ' + (r.saldo >= 0 ? 'saldo-pos' : 'saldo-neg') + (destaque ? ' destaque-ouro' : '');
+    tr.innerHTML = `
+      <td>Jogo ${i + 1}${trofeu}</td>
+      <td class="jogos-dezenas">${dezenasTxt}</td>
+      <td>${c6}</td><td>${c5}</td><td>${c4}</td><td>${c3}</td>
+      <td>${r.premiados.length}</td>
+      <td>${formatarMoeda(r.custo)}</td>
+      <td>${formatarMoeda(r.ganho)}</td>
+      <td class="${r.saldo >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(r.saldo)}</td>
+      <td class="${r.roi >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(r.roi)}</td>`;
+    tbody.appendChild(tr);
+
+    const trDetail = document.createElement('tr');
+    trDetail.className = 'jogos-detail-row';
+    const tdDetail = document.createElement('td');
+    tdDetail.colSpan = 11;
+    const inner = document.createElement('div');
+    inner.className = 'jogos-detail-inner';
+    tdDetail.appendChild(inner);
+    trDetail.appendChild(tdDetail);
+    tbody.appendChild(trDetail);
+
+    let construido = false;
+    tr.addEventListener('click', () => {
+      const aberto = inner.classList.contains('aberto');
+      if (!aberto && !construido) {
+        duplasenaRenderChipsTxt(inner, r.premiados);
+        construido = true;
+      }
+      inner.classList.toggle('aberto', !aberto);
+    });
+  });
+
+  table.appendChild(tbody);
+  el.appendChild(table);
+}
+
+{
+  const listaEl = document.getElementById('sim-jogos-lista');
+  const btnAdd = document.getElementById('sim-btn-add');
+  const btnVerificar = document.getElementById('sim-btn');
+  const errEl = document.getElementById('sim-error');
+  const resultEl = document.getElementById('sim-result');
+  const SIM_TXT_MAX = 30;
+
+  function renumerarJogosTxt() {
+    const rows = listaEl.querySelectorAll('.sim-jogo-row');
+    rows.forEach((row, i) => {
+      row.querySelector('.sim-jogo-label').textContent = 'Jogo ' + (i + 1);
+      row.querySelector('.sim-jogo-remove').style.visibility = rows.length > 1 ? 'visible' : 'hidden';
+    });
+  }
+
+  function atualizarBadgeTxt(row) {
+    const inputEl = row.querySelector('.sim-jogo-input');
+    const badge = row.querySelector('.sim-jogo-badge');
+    const v = validarJogoTextoDS(inputEl.value);
+    badge.classList.remove('ok', 'parcial', 'erro');
+    inputEl.classList.remove('erro');
+    if (v.status === 'vazio') {
+      badge.textContent = '';
+    } else if (v.status === 'ok') {
+      badge.textContent = `✓ ${v.validos.length} números`;
+      badge.classList.add('ok');
+    } else if (v.status === 'erro') {
+      badge.textContent = v.validos.length > 15 ? 'máx. 15 números' : 'inválido/repetido';
+      badge.classList.add('erro');
+      inputEl.classList.add('erro');
+    } else {
+      badge.textContent = `${v.validos.length}/6 mínimo`;
+      badge.classList.add('parcial');
+    }
+  }
+
+  function criarLinhaJogoTxt() {
+    const row = document.createElement('div');
+    row.className = 'sim-jogo-row';
+
+    const label = document.createElement('span');
+    label.className = 'sim-jogo-label';
+    label.textContent = 'Jogo';
+    row.appendChild(label);
+
+    const inputEl = document.createElement('input');
+    inputEl.type = 'text';
+    inputEl.className = 'sim-jogo-input';
+    inputEl.placeholder = 'ex: 13 14 15 17 40 42';
+    inputEl.addEventListener('input', () => atualizarBadgeTxt(row));
+    row.appendChild(inputEl);
+
+    const badge = document.createElement('span');
+    badge.className = 'sim-jogo-badge';
+    row.appendChild(badge);
+
+    const btnRemove = document.createElement('button');
+    btnRemove.type = 'button';
+    btnRemove.className = 'sim-jogo-remove';
+    btnRemove.textContent = '🗑️';
+    btnRemove.addEventListener('click', () => {
+      if (listaEl.querySelectorAll('.sim-jogo-row').length <= 1) return;
+      row.remove();
+      renumerarJogosTxt();
+    });
+    row.appendChild(btnRemove);
+
+    return row;
+  }
+
+  function definirQuantidadeTxt(n) {
+    listaEl.innerHTML = '';
+    for (let i = 0; i < n; i++) listaEl.appendChild(criarLinhaJogoTxt());
+    renumerarJogosTxt();
+  }
+
+  document.querySelectorAll('#sim-qtd-selector input[name="sim-qtd"]').forEach(radio => {
+    radio.addEventListener('change', () => { if (radio.checked) definirQuantidadeTxt(+radio.value); });
+  });
+  btnAdd.addEventListener('click', () => {
+    if (listaEl.querySelectorAll('.sim-jogo-row').length >= SIM_TXT_MAX) return;
+    document.querySelectorAll('#sim-qtd-selector input[name="sim-qtd"]').forEach(r => r.checked = false);
+    listaEl.appendChild(criarLinhaJogoTxt());
+    renumerarJogosTxt();
+  });
+
+  definirQuantidadeTxt(1); // estado inicial
+
+  let ultimosResultadosTxt = [];
+
+  const btnCopiar = document.createElement('button');
+  btnCopiar.type = 'button';
+  btnCopiar.className = 'sim-copiar-btn';
+  btnCopiar.textContent = '📋 Copiar resultado';
+  btnCopiar.style.display = 'none';
+  btnCopiar.addEventListener('click', () => {
+    if (!ultimosResultadosTxt.length) return;
+    const linhas = ['#\tNúmeros\tPremiados\tGasto\tGanho\tSaldo\tROI'];
+    ultimosResultadosTxt.forEach((r, i) => {
+      const dezenasTxt = [...r.numeros].sort((a, b) => a - b).map(n => String(n).padStart(2, '0')).join(' ');
+      linhas.push(`Jogo ${i + 1}\t${dezenasTxt}\t${r.premiados.length}\t${formatarMoeda(r.custo)}\t${formatarMoeda(r.ganho)}\t${formatarMoeda(r.saldo)}\t${formatarPct(r.roi)}`);
+    });
+    navigator.clipboard.writeText(linhas.join('\n')).then(() => {
+      btnCopiar.textContent = '✓ Copiado!';
+      setTimeout(() => { btnCopiar.textContent = '📋 Copiar resultado'; }, 2000);
+    }).catch(() => {
+      btnCopiar.textContent = 'Não foi possível copiar';
+      setTimeout(() => { btnCopiar.textContent = '📋 Copiar resultado'; }, 2000);
+    });
+  });
+
+  btnVerificar.addEventListener('click', () => {
+    errEl.style.display = 'none';
+    resultEl.innerHTML = '';
+    btnCopiar.style.display = 'none';
+
+    const linhas = [...listaEl.querySelectorAll('.sim-jogo-row')];
+    const validacoes = linhas.map(row => ({ row, v: validarJogoTextoDS(row.querySelector('.sim-jogo-input').value) }));
+    const validos = [];
+    let ignorados = 0;
+    validacoes.forEach(({ row, v }) => {
+      row.querySelector('.sim-jogo-input').classList.toggle('erro', v.status === 'erro');
+      if (v.status === 'ok') validos.push(v.validos);
+      else if (v.status !== 'vazio') ignorados++;
+    });
+
+    if (!validos.length) {
+      errEl.textContent = linhas.length === 1
+        ? 'Digite de 6 a 15 números inteiros entre 01 e 50, sem repetição.'
+        : 'Nenhum jogo válido — cada um precisa de 6 a 15 números entre 01 e 50, sem repetição.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    // simula contra o período de análise ativo no momento (bundleAtivo() já
+    // resolve "todos"/1 ano/N anos mesclados)
+    const bundleSim = bundleAtivo() || DATA;
+    const sorteiosRawSim = bundleSim.sorteios_raw || DATA.sorteios_raw;
+    const sorteiosMetaSim = bundleSim.sorteios_meta || DATA.sorteios_meta || [];
+    ultimosResultadosTxt = validos.map(v => duplasenaSimularJogo(v, sorteiosRawSim, sorteiosMetaSim));
+
+    if (ignorados > 0) {
+      const aviso = document.createElement('div');
+      aviso.className = 'sim-aviso';
+      aviso.textContent = `${ignorados} jogo(s) ignorado(s) por estarem incompletos ou inválidos.`;
+      resultEl.appendChild(aviso);
+    }
+
+    if (ultimosResultadosTxt.length === 1) {
+      duplasenaRenderUnicoTxt(ultimosResultadosTxt[0], resultEl);
+    } else {
+      duplasenaRenderComparativoTxt(ultimosResultadosTxt, resultEl);
+    }
+    resultEl.appendChild(btnCopiar);
+    btnCopiar.style.display = 'inline-block';
+  });
 }
 
 // ── "Meus Jogos" — tabela comparativa dos 16 jogos fixos (JOGOS_DUPLASENA no
