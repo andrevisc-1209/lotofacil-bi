@@ -792,6 +792,33 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     padding: 8px 14px; transition: border-color .15s, color .15s;
   }
   a.voltar-menu:hover { border-color: var(--accent); color: var(--accent2); text-decoration: none; }
+  .modo-simples-btn {
+    color: var(--text); font-size: 12px; font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+    background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r-sm);
+    padding: 8px 14px; transition: border-color .15s, color .15s, background .15s;
+  }
+  .modo-simples-btn:hover { border-color: var(--accent); color: var(--accent2); }
+  .modo-simples-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  /* "Modo simples" — preferência opcional (salva no navegador) que aumenta
+     fonte e reforça contraste nas áreas de maior leitura, sem mudar o tema.
+     Pensado para usuários com dificuldade de leitura de texto pequeno. */
+  body.modo-simples { font-size: 16px; }
+  body.modo-simples td, body.modo-simples th { font-size: 15px !important; }
+  body.modo-simples .resultado-badge { font-size: 13px !important; padding: 6px 12px !important; }
+  body.modo-simples .mini-stats b { font-size: 19px !important; }
+  body.modo-simples .mini-stats > div { font-size: 13px !important; }
+  body.modo-simples .explicacao { font-size: 15px !important; }
+  body.modo-simples .jogos-resumo-titulo { font-size: 16px !important; }
+  body.modo-simples .page-tab { font-size: 13px !important; }
+  body.modo-simples .btn-primary, body.modo-simples .btn-secondary,
+  body.modo-simples .modo-simples-btn, body.modo-simples .voltar-menu {
+    font-size: 14px !important; padding: 11px 18px !important;
+  }
+  body.modo-simples .card h2 { font-size: 15px !important; }
+  body.modo-simples .kpi .value { font-size: 32px !important; }
+  body.modo-simples .numgrid-cell { font-size: 16px !important; }
+  body.modo-simples .simball-cell { font-size: 15px !important; }
   .concurso-badge .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
   @media (max-width: 640px) {
     header { padding: 14px 16px; gap: 10px; }
@@ -1232,6 +1259,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <h1>🍀 Lotofácil BI</h1>
   <div class="concurso-badge"><span class="dot"></span><b>{subtitulo}</b></div>
   <a class="voltar-menu" href="index.html">← Menu</a>
+  <button id="modo-simples-btn" class="modo-simples-btn" type="button" aria-pressed="false" title="Aumenta o tamanho do texto e o contraste em todas as telas">🔍 Modo simples</button>
   <div id="supabase-status" style="display:none;"></div>
 </header>
 
@@ -1622,6 +1650,24 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <footer>Dados: API oficial Caixa Econômica Federal • {gerado_em}</footer>
 
 <script>
+// ── "Modo simples" — fonte maior e mais contraste, opcional, salvo no
+// navegador (compartilhado entre os 4 dashboards do mesmo domínio). ───────
+{
+  const MODO_SIMPLES_KEY = 'lotoBI_modoSimples';
+  const btn = document.getElementById('modo-simples-btn');
+  function aplicarModoSimples(ativo) {
+    document.body.classList.toggle('modo-simples', ativo);
+    btn.setAttribute('aria-pressed', ativo ? 'true' : 'false');
+    btn.textContent = ativo ? '🔍 Modo simples ✓' : '🔍 Modo simples';
+  }
+  aplicarModoSimples(localStorage.getItem(MODO_SIMPLES_KEY) === '1');
+  btn.addEventListener('click', () => {
+    const ativo = !document.body.classList.contains('modo-simples');
+    localStorage.setItem(MODO_SIMPLES_KEY, ativo ? '1' : '0');
+    aplicarModoSimples(ativo);
+  });
+}
+
 const DATA = {data_json};
 
 // helpers
