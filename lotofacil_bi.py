@@ -725,7 +725,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     --bg3: #22222f;
     --text: #e8e8f0;
     --text-2: #a0a0b8;
-    --text-3: #606078;
+    --text-3: #8f93ab;
     --border: #2a2a3a;
     --border-2: #3a3a4f;
     --shadow: 0 4px 24px rgba(0,0,0,0.4);
@@ -743,6 +743,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     /* cores de status */
     --green: #22c55e;
     --red: #ef4444;
+    --neg: #94a3b8;
     --gold: #f59e0b;
     --yellow: #f59e0b;
     --blue: #3b82f6;
@@ -936,7 +937,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   /* table */
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th { text-align: left; color: var(--text-3); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; padding: 10px 14px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg1); z-index: 1; }
-  td { padding: 10px 14px; color: var(--text-2); font-family: var(--font-mono); font-size: 12px; border-bottom: 1px solid var(--border); }
+  td { padding: 10px 14px; color: var(--text-2); font-family: var(--font-mono); font-size: 13px; border-bottom: 1px solid var(--border); }
   td.jogos-nome { font-family: var(--font); color: var(--text); }
   tbody tr:nth-child(even) td { background: rgba(255,255,255,.025); }
   tbody tr:hover td { background: var(--bg2); }
@@ -956,7 +957,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .mini-stats { display: flex; gap: 24px; margin-top: 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
   .mini-stats b { color: var(--text); font-size: 16px; display: block; }
   .mini-stats b.money-pos { color: var(--green); }
-  .mini-stats b.money-neg { color: var(--red); }
+  .mini-stats b.money-neg { color: var(--neg); }
+  .mini-stats .explicacao { font-size: 12px; color: var(--text-3); margin-top: 10px; }
   /* validador de jogos — resumo, tabela ordenável e detalhe expandível */
   .jogos-resumo-titulo { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
   .jogos-resumo-sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
@@ -1066,7 +1068,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .sim-copiar-btn { margin-top: 12px; background: transparent; border: 1px solid var(--border); border-radius: 6px; padding: 8px 16px; color: var(--text); cursor: pointer; font-size: 12px; }
   .sim-copiar-btn:hover { border-color: var(--accent); color: #a78bfa; }
   .money-pos { color: var(--green); font-weight: 700; }
-  .money-neg { color: var(--red); font-weight: 700; }
+  .money-neg { color: var(--neg); font-weight: 700; }
+  .resultado-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .resultado-badge.lucro { background: rgba(34,197,94,.15); color: var(--green); }
+  .resultado-badge.prejuizo { background: rgba(148,163,184,.15); color: var(--neg); }
   /* seletor de período — card com grupos empilhados por tipo (Ano/Semestre
      sempre visíveis; Trimestre/Bimestre/Mês atrás de um accordion) */
   .period-selector-wrap { padding: 14px 24px 0; position: sticky; top: 65px; z-index: 40; }
@@ -1962,20 +1967,21 @@ const ESTADO_ORDENACAO_JOGOS = {}; // por prefix: { coluna, direcao }
 const PREMIOS_REF_JS = { 14: 1733.31, 13: 35.00, 12: 14.00, 11: 7.00 };
 const CUSTO_JOGO_JS = 3.00;
 const COLUNAS_JOGOS = [
+  { key: 'resultado', label: 'Resultado', ordenavel: false },
   { key: 'idx', label: '#', ordenavel: false },
   { key: 'nome', label: 'Jogo', ordenavel: true },
   { key: 'dezenas', label: 'Dezenas', ordenavel: false },
-  { key: 'p15', label: '15pts', ordenavel: true },
-  { key: 'p14', label: '14pts', ordenavel: true },
-  { key: 'p13', label: '13pts', ordenavel: true },
-  { key: 'p12', label: '12pts', ordenavel: true },
-  { key: 'p11', label: '11pts', ordenavel: true },
+  { key: 'p15', label: '15 acertos', ordenavel: true },
+  { key: 'p14', label: '14 acertos', ordenavel: true },
+  { key: 'p13', label: '13 acertos', ordenavel: true },
+  { key: 'p12', label: '12 acertos', ordenavel: true },
+  { key: 'p11', label: '11 acertos', ordenavel: true },
   { key: 'total_premiado', label: 'Total≥11', ordenavel: true },
   { key: 'pct_premiado', label: '% Premiado', ordenavel: true },
   { key: 'gasto', label: 'Gasto', ordenavel: true },
   { key: 'ganho', label: 'Ganho', ordenavel: true },
   { key: 'saldo', label: 'Saldo', ordenavel: true },
-  { key: 'roi', label: 'ROI', ordenavel: true },
+  { key: 'roi', label: 'Retorno', ordenavel: true },
   { key: 'melhor', label: 'Melhor resultado', ordenavel: false },
 ];
 
@@ -3384,7 +3390,7 @@ function validarJogoTexto(texto) {
       <div>Custo total<b>${formatarMoeda(resultado.custo)}</b></div>
       <div>Ganho estimado<b>${formatarMoeda(resultado.ganho)}</b></div>
       <div>Saldo<b class="${resultado.saldo >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(resultado.saldo)}</b></div>
-      <div>ROI<b class="${resultado.roi >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(resultado.roi)}</b></div>`;
+      <div>Retorno (ROI)<b class="${resultado.roi >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(resultado.roi)}</b></div>`;
     targetEl.appendChild(finDiv);
 
     const btnToggle = document.createElement('button');
@@ -3407,16 +3413,30 @@ function validarJogoTexto(texto) {
     const maxIndividual = Math.max(...resultados.map(r => r.melhorIndividual));
 
     const table = document.createElement('table');
-    table.innerHTML = `<thead><tr><th>#</th><th>Números</th><th>15pts</th><th>14pts</th><th>13pts</th><th>12pts</th><th>11pts</th><th>Total prêmios</th><th>Custo</th><th>Ganho</th><th>Saldo</th><th>ROI</th></tr></thead>`;
+    table.innerHTML = `<thead><tr>`
+      + `<th>Resultado</th><th>#</th><th>Números</th>`
+      + `<th title="15 números acertados">15 acertos</th>`
+      + `<th title="14 números acertados">14 acertos</th>`
+      + `<th title="13 números acertados">13 acertos</th>`
+      + `<th title="12 números acertados">12 acertos</th>`
+      + `<th title="11 números acertados">11 acertos</th>`
+      + `<th>Total prêmios</th><th>Custo</th><th>Ganho</th><th>Saldo</th>`
+      + `<th title="Retorno sobre o valor apostado">Retorno</th>`
+      + `</tr></thead>`;
     const tbody = document.createElement('tbody');
 
     resultados.forEach((r, i) => {
       const tr = document.createElement('tr');
-      tr.className = 'sim-compare-row';
+      const comLucro = r.saldo >= 0;
+      tr.className = 'sim-compare-row ' + (comLucro ? 'saldo-pos' : 'saldo-neg');
       if (r.totalPremios === maxPremios && maxPremios > 0) tr.classList.add('destaque-ouro');
       const trofeuIndividual = (r.melhorIndividual === maxIndividual && maxIndividual > 0)
         ? `<span class="sim-trofeu" title="Maior acerto individual entre os jogos simulados">🏆</span>` : '';
+      const badge = comLucro
+        ? '<span class="resultado-badge lucro">💰 Com lucro</span>'
+        : '<span class="resultado-badge prejuizo">📉 Abaixo do investido</span>';
       tr.innerHTML = `
+        <td>${badge}</td>
         <td>Jogo ${i + 1}</td>
         <td>${formatarNumeros(r.numeros)}</td>
         <td>${r.pontos[15]}</td>
@@ -3427,13 +3447,13 @@ function validarJogoTexto(texto) {
         <td>${r.totalPremios}${trofeuIndividual}</td>
         <td>${formatarMoeda(r.custo)}</td>
         <td>${formatarMoeda(r.ganho)}</td>
-        <td class="${r.saldo >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(r.saldo)}</td>
+        <td class="${comLucro ? 'money-pos' : 'money-neg'}">${formatarMoeda(r.saldo)}</td>
         <td class="${r.roi >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(r.roi)}</td>`;
       tbody.appendChild(tr);
 
       const trDetalhe = document.createElement('tr');
       const tdDetalhe = document.createElement('td');
-      tdDetalhe.colSpan = 12;
+      tdDetalhe.colSpan = 13;
       const btnToggle = document.createElement('button');
       btnToggle.className = 'sim-detalhe-toggle';
       btnToggle.textContent = `Ver em quais concursos pontuou (${r.concursosPontuados.length})`;
@@ -3636,6 +3656,9 @@ function renderJogosResumo(jogos, ids, nSorteios) {
   const ganhoTotal = jogos.reduce((a, j) => a + j.ganho, 0);
   const saldoTotal = +(ganhoTotal - gastoTotal).toFixed(2);
   const roiTotal = gastoTotal ? (saldoTotal / gastoTotal * 100) : 0;
+  const explicacao = saldoTotal >= 0
+    ? 'Somando esses jogos nesse período, o total recebido em prêmios superou o total apostado.'
+    : 'Somando esses jogos nesse período, o total apostado foi maior do que o total recebido em prêmios — resultado esperado na maioria dos jogos de loteria.';
   el.innerHTML = `
     <div class="jogos-resumo-titulo">${nJogos} jogo${nJogos === 1 ? '' : 's'} · ${formatarMoeda(custoPorSorteio)} por sorteio</div>
     <div class="mini-stats">
@@ -3643,8 +3666,9 @@ function renderJogosResumo(jogos, ids, nSorteios) {
       <div>Total apostado<b>${formatarMoeda(gastoTotal)}</b></div>
       <div>Total ganho<b>${formatarMoeda(ganhoTotal)}</b></div>
       <div>Saldo<b class="${saldoTotal >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(saldoTotal)}</b></div>
-      <div>ROI<b class="${roiTotal >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(roiTotal)}</b></div>
-    </div>`;
+      <div>Retorno (ROI)<b class="${roiTotal >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(roiTotal)}</b></div>
+    </div>
+    <div class="explicacao">${explicacao}</div>`;
 }
 
 function construirDetalheJogo(container, jogo, canvasIdBase) {
@@ -3752,13 +3776,18 @@ function renderJogosTabela(jogos, ids, nSorteios) {
   const tbody = document.createElement('tbody');
   ordenados.forEach((jogo, i) => {
     const tr = document.createElement('tr');
-    tr.className = 'jogos-row ' + (jogo.saldo >= 0 ? 'saldo-pos' : 'saldo-neg');
+    const comLucro = jogo.saldo >= 0;
+    tr.className = 'jogos-row ' + (comLucro ? 'saldo-pos' : 'saldo-neg');
     const dezenasTxt = jogo.numeros.map(n => String(n).padStart(2, '0')).join(' ');
     const melhorTxt = jogo.melhor.concurso ? `${jogo.melhor.acertos} pts (c.${jogo.melhor.concurso})` : '—';
     let nomeTxt = jogo.nome;
     if (jogo === melhorRoi) nomeTxt += ' 🏆';
     if (jogo === maisPremiado) nomeTxt += ' 🥇';
+    const badge = comLucro
+      ? '<span class="resultado-badge lucro">💰 Com lucro</span>'
+      : '<span class="resultado-badge prejuizo">📉 Abaixo do investido</span>';
     tr.innerHTML = `
+      <td>${badge}</td>
       <td style="color:var(--muted)">${i + 1}</td>
       <td class="jogos-nome">${nomeTxt}</td>
       <td class="jogos-dezenas">${dezenasTxt}</td>
@@ -3771,7 +3800,7 @@ function renderJogosTabela(jogos, ids, nSorteios) {
       <td>${jogo.pct_premiado}%</td>
       <td>${formatarMoeda(jogo.gasto)}</td>
       <td>${formatarMoeda(jogo.ganho)}</td>
-      <td class="${jogo.saldo >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(jogo.saldo)}</td>
+      <td class="${comLucro ? 'money-pos' : 'money-neg'}">${formatarMoeda(jogo.saldo)}</td>
       <td class="${jogo.roi >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(jogo.roi)}</td>
       <td>${melhorTxt}</td>`;
     tbody.appendChild(tr);

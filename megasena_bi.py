@@ -604,7 +604,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     --bg3: #161824;
     --text: #e8e8f0;
     --text-2: #a0a0b8;
-    --text-3: #606078;
+    --text-3: #8f93ab;
     --border: #2a2a3a;
     --border-2: #3a3a4f;
     --shadow: 0 4px 24px rgba(0,0,0,0.4);
@@ -621,6 +621,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     /* status colors */
     --green: #22c55e;
     --red: #ef4444;
+    --neg: #94a3b8;
     --gold: #f59e0b;
     --yellow: #f59e0b;
     --blue: #3b82f6;
@@ -806,7 +807,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .tab-content.active { display: block; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th { padding: 10px 14px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); font-weight: 600; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--card); z-index: 1; }
-  td { padding: 10px 14px; color: var(--text-2); font-family: var(--font-mono); font-size: 12px; border-bottom: 1px solid var(--border); }
+  td { padding: 10px 14px; color: var(--text-2); font-family: var(--font-mono); font-size: 13px; border-bottom: 1px solid var(--border); }
   .jogos-tabela td:nth-child(2) { font-family: var(--font); color: var(--text); }
   tbody tr:nth-child(even) td { background: rgba(255,255,255,.025); }
   tr:hover td { background: var(--bg2); }
@@ -825,7 +826,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .mini-stats { display: flex; gap: 24px; margin-top: 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
   .mini-stats b { color: var(--text); font-size: 16px; display: block; }
   .mini-stats b.money-pos { color: var(--green); }
-  .mini-stats b.money-neg { color: var(--red); }
+  .mini-stats b.money-neg { color: var(--neg); }
+  .mini-stats .explicacao { font-size: 12px; color: var(--text-3); margin-top: 10px; }
   .status-tag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
   .status-tag.dentro { background: rgba(16,185,129,.15); color: var(--green); }
   .status-tag.alem { background: rgba(239,68,68,.15); color: var(--red); }
@@ -860,7 +862,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .hotcold-card .pct { font-size: 10px; color: var(--muted); margin-top: 2px; }
   .hotcold-legend { display: flex; gap: 18px; margin-bottom: 12px; font-size: 12px; color: var(--muted); }
   .money-pos { color: var(--green); font-weight: 700; }
-  .money-neg { color: var(--red); font-weight: 700; }
+  .money-neg { color: var(--neg); font-weight: 700; }
+  .resultado-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .resultado-badge.lucro { background: rgba(34,197,94,.15); color: var(--green); }
+  .resultado-badge.prejuizo { background: rgba(148,163,184,.15); color: var(--neg); }
   /* validador financeiro de jogos ("Meus jogos") */
   .jogos-resumo-titulo { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
   .jogos-resumo-sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
@@ -1435,18 +1440,19 @@ const PREMIOS_REF_JS = { 4: 1106.60, 5: 55434.22 };
 const CAMPO_VALOR_FAIXA_MEGA_JS = { 4: 'valor_quadra', 5: 'valor_quina' };
 const CUSTO_JOGO_JS = 5.00;
 const COLUNAS_JOGOS = [
+  { key: 'resultado', label: 'Resultado', ordenavel: false },
   { key: 'idx', label: '#', ordenavel: false },
   { key: 'nome', label: 'Jogo', ordenavel: true },
   { key: 'dezenas', label: 'Dezenas', ordenavel: false },
-  { key: 'p6', label: '6pts', ordenavel: true },
-  { key: 'p5', label: '5pts', ordenavel: true },
-  { key: 'p4', label: '4pts', ordenavel: true },
+  { key: 'p6', label: 'Sena', ordenavel: true },
+  { key: 'p5', label: 'Quina', ordenavel: true },
+  { key: 'p4', label: 'Quadra', ordenavel: true },
   { key: 'total_premiado', label: 'Total≥4', ordenavel: true },
   { key: 'pct_premiado', label: '% Premiado', ordenavel: true },
   { key: 'gasto', label: 'Gasto', ordenavel: true },
   { key: 'ganho', label: 'Ganho', ordenavel: true },
   { key: 'saldo', label: 'Saldo', ordenavel: true },
-  { key: 'roi', label: 'ROI', ordenavel: true },
+  { key: 'roi', label: 'Retorno', ordenavel: true },
   { key: 'melhor', label: 'Melhor resultado', ordenavel: false },
 ];
 
@@ -1961,6 +1967,9 @@ function renderJogosResumo(jogos, ids, nSorteios) {
   const ganhoTotal = jogos.reduce((a, j) => a + j.ganho, 0);
   const saldoTotal = +(ganhoTotal - gastoTotal).toFixed(2);
   const roiTotal = gastoTotal ? (saldoTotal / gastoTotal * 100) : 0;
+  const explicacao = saldoTotal >= 0
+    ? 'Somando esses jogos nesse período, o total recebido em prêmios superou o total apostado.'
+    : 'Somando esses jogos nesse período, o total apostado foi maior do que o total recebido em prêmios — resultado esperado na maioria dos jogos de loteria.';
   el.innerHTML = `
     <div class="jogos-resumo-titulo">${nJogos} jogo${nJogos === 1 ? '' : 's'} · ${formatarMoeda(custoPorSorteio)} por sorteio</div>
     <div class="mini-stats">
@@ -1968,8 +1977,9 @@ function renderJogosResumo(jogos, ids, nSorteios) {
       <div>Total apostado<b>${formatarMoeda(gastoTotal)}</b></div>
       <div>Total ganho<b>${formatarMoeda(ganhoTotal)}</b></div>
       <div>Saldo<b class="${saldoTotal >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(saldoTotal)}</b></div>
-      <div>ROI<b class="${roiTotal >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(roiTotal)}</b></div>
-    </div>`;
+      <div>Retorno (ROI)<b class="${roiTotal >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(roiTotal)}</b></div>
+    </div>
+    <div class="explicacao">${explicacao}</div>`;
 }
 
 function construirDetalheJogo(container, jogo, canvasIdBase) {
@@ -2077,13 +2087,18 @@ function renderJogosTabela(jogos, ids, nSorteios) {
   const tbody = document.createElement('tbody');
   ordenados.forEach((jogo, i) => {
     const tr = document.createElement('tr');
-    tr.className = 'jogos-row ' + (jogo.saldo >= 0 ? 'saldo-pos' : 'saldo-neg');
+    const comLucro = jogo.saldo >= 0;
+    tr.className = 'jogos-row ' + (comLucro ? 'saldo-pos' : 'saldo-neg');
     const dezenasTxt = jogo.numeros.map(n => String(n).padStart(2, '0')).join(' ');
     const melhorTxt = jogo.melhor.concurso ? `${jogo.melhor.acertos} pts (c.${jogo.melhor.concurso})` : '—';
     let nomeTxt = jogo.nome;
     if (jogo === melhorRoi) nomeTxt += ' 🏆';
     if (jogo === maisPremiado) nomeTxt += ' 🥇';
+    const badge = comLucro
+      ? '<span class="resultado-badge lucro">💰 Com lucro</span>'
+      : '<span class="resultado-badge prejuizo">📉 Abaixo do investido</span>';
     tr.innerHTML = `
+      <td>${badge}</td>
       <td style="color:var(--muted)">${i + 1}</td>
       <td>${nomeTxt}</td>
       <td class="jogos-dezenas">${dezenasTxt}</td>
@@ -2094,7 +2109,7 @@ function renderJogosTabela(jogos, ids, nSorteios) {
       <td>${jogo.pct_premiado}%</td>
       <td>${formatarMoeda(jogo.gasto)}</td>
       <td>${formatarMoeda(jogo.ganho)}</td>
-      <td class="${jogo.saldo >= 0 ? 'money-pos' : 'money-neg'}">${formatarMoeda(jogo.saldo)}</td>
+      <td class="${comLucro ? 'money-pos' : 'money-neg'}">${formatarMoeda(jogo.saldo)}</td>
       <td class="${jogo.roi >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(jogo.roi)}</td>
       <td>${melhorTxt}</td>`;
     tbody.appendChild(tr);
@@ -2888,7 +2903,7 @@ function megasimRenderResultado(resultados, elId) {
         <div>Custo total<b>${megasimFormatarMoeda(r.custo)}</b></div>
         <div>Ganho estimado<b>${megasimFormatarMoeda(r.ganho)}</b></div>
         <div>Saldo estimado<b class="${r.saldo >= 0 ? 'money-pos' : 'money-neg'}">${megasimFormatarMoeda(r.saldo)}</b></div>
-        <div>ROI<b class="${r.roi >= 0 ? 'money-pos' : 'money-neg'}">${(r.roi >= 0 ? '+' : '') + r.roi.toFixed(1)}%</b></div>
+        <div>Retorno (ROI)<b class="${r.roi >= 0 ? 'money-pos' : 'money-neg'}">${(r.roi >= 0 ? '+' : '') + r.roi.toFixed(1)}%</b></div>
       </div>
       ${senaHtml}`;
     el.appendChild(card);
