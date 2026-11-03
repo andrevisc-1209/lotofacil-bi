@@ -835,6 +835,11 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .sim-qtd-selector { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; font-size: 13px; }
   .sim-qtd-selector label { display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--text); }
   .sim-qtd-label { font-weight: 700; color: var(--text-3); text-transform: uppercase; font-size: 11px; letter-spacing: .5px; }
+  .sim-qtd-num { width: 70px; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 7px 10px; color: var(--text); font-size: 13px; text-align: center; }
+  .sim-qtd-num:focus { outline: none; border-color: var(--accent); }
+  .sim-qtd-suffix { color: var(--text-3); font-size: 12px; }
+  .sim-qtd-aplicar-btn { background: transparent; border: 1px solid var(--border); border-radius: var(--r-sm); padding: 7px 14px; color: var(--text); cursor: pointer; font-size: 12px; }
+  .sim-qtd-aplicar-btn:hover { border-color: var(--accent); color: var(--accent2); }
   .sim-jogos-lista { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
   .sim-jogo-row { display: flex; align-items: center; gap: 8px; }
   .sim-jogo-label { width: 62px; flex-shrink: 0; font-size: 12px; color: var(--text-3); font-weight: 600; }
@@ -1383,11 +1388,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
     <div class="sim-qtd-selector" id="sim-qtd-selector">
       <span class="sim-qtd-label">Simular</span>
-      <label><input type="radio" name="sim-qtd" value="1" checked> 1 jogo</label>
-      <label><input type="radio" name="sim-qtd" value="5"> 5 jogos</label>
-      <label><input type="radio" name="sim-qtd" value="10"> 10 jogos</label>
-      <label><input type="radio" name="sim-qtd" value="15"> 15 jogos</label>
-      <label><input type="radio" name="sim-qtd" value="30"> 30 jogos</label>
+      <input type="number" id="sim-qtd-input" class="sim-qtd-num" min="1" max="30" step="1" value="1">
+      <span class="sim-qtd-suffix">jogo(s) — de 1 a 30</span>
+      <button type="button" id="sim-qtd-aplicar" class="sim-qtd-aplicar-btn">Aplicar</button>
     </div>
 
     <div id="sim-jogos-lista" class="sim-jogos-lista"></div>
@@ -3693,6 +3696,8 @@ function duplasenaRenderComparativoTxt(resultados, el) {
       if (listaEl.querySelectorAll('.sim-jogo-row').length <= 1) return;
       row.remove();
       renumerarJogosTxt();
+      const qtdInputEl = document.getElementById('sim-qtd-input');
+      if (qtdInputEl) qtdInputEl.value = listaEl.querySelectorAll('.sim-jogo-row').length;
     });
     row.appendChild(btnRemove);
 
@@ -3705,13 +3710,23 @@ function duplasenaRenderComparativoTxt(resultados, el) {
     renumerarJogosTxt();
   }
 
-  document.querySelectorAll('#sim-qtd-selector input[name="sim-qtd"]').forEach(radio => {
-    radio.addEventListener('change', () => { if (radio.checked) definirQuantidadeTxt(+radio.value); });
-  });
+  const qtdInput = document.getElementById('sim-qtd-input');
+  const qtdAplicar = document.getElementById('sim-qtd-aplicar');
+
+  function aplicarQtdInput() {
+    let n = parseInt(qtdInput.value, 10);
+    if (!Number.isFinite(n) || n < 1) n = 1;
+    if (n > SIM_TXT_MAX) n = SIM_TXT_MAX;
+    qtdInput.value = n;
+    definirQuantidadeTxt(n);
+  }
+  qtdAplicar.addEventListener('click', aplicarQtdInput);
+  qtdInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') aplicarQtdInput(); });
+
   btnAdd.addEventListener('click', () => {
     if (listaEl.querySelectorAll('.sim-jogo-row').length >= SIM_TXT_MAX) return;
-    document.querySelectorAll('#sim-qtd-selector input[name="sim-qtd"]').forEach(r => r.checked = false);
     listaEl.appendChild(criarLinhaJogoTxt());
+    qtdInput.value = listaEl.querySelectorAll('.sim-jogo-row').length;
     renumerarJogosTxt();
   });
 
