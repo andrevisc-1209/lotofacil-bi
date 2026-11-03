@@ -776,9 +776,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .numgrid-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
   .numgrid-hint { font-size: 12px; color: var(--muted); flex: 1 1 260px; }
   @media (max-width: 640px) {
-    .numgrid { max-width: 340px; gap: 5px; }
-    .numgrid-cell { font-size: 10px; }
+    .numgrid { grid-template-columns: repeat(5, 1fr); max-width: 320px; gap: 10px; }
+    .numgrid-cell { font-size: 14px; }
     .numgrid-footer { flex-direction: column; align-items: stretch; }
+    .simball-grid { grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 10px; }
   }
   /* simulador de jogo — seleção visual por bolinhas (reusa o cálculo do
      simulador de aposta por texto, só troca o método de entrada) */
@@ -878,6 +879,32 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .jogos-row:hover td { filter: brightness(1.15); }
   .jogos-row .jogos-dezenas { font-family: monospace; font-size: 11px; color: var(--muted); }
   .jogos-detail-row td { padding: 0; border-bottom: 1px solid #1e2130; }
+  /* "Meus Jogos" em cards no mobile (em vez de tabela com scroll horizontal)
+     — usa data-label nos <td> pra desenhar o rótulo de cada campo; a linha
+     de detalhe expansível fica fora do padrão de 2 colunas, só vira bloco
+     normal. */
+  @media (max-width: 760px) {
+    table.jogos-cards-table thead { display: none; }
+    table.jogos-cards-table, table.jogos-cards-table tbody { display: block; width: 100%; }
+    table.jogos-cards-table tr.jogos-row,
+    table.jogos-cards-table tr.sim-compare-row {
+      display: block; background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--r-md); margin-bottom: 14px; padding: 10px 12px;
+    }
+    table.jogos-cards-table tr.jogos-row td,
+    table.jogos-cards-table tr.sim-compare-row td {
+      display: flex; justify-content: space-between; align-items: center; gap: 10px;
+      padding: 7px 2px; border-bottom: 1px dashed var(--border); text-align: right; font-size: 13px;
+    }
+    table.jogos-cards-table tr.jogos-row td:last-child,
+    table.jogos-cards-table tr.sim-compare-row td:last-child { border-bottom: none; }
+    table.jogos-cards-table tr.jogos-row td::before,
+    table.jogos-cards-table tr.sim-compare-row td::before {
+      content: attr(data-label); font-weight: 600; color: var(--text-3); text-align: left; flex-shrink: 0;
+    }
+    table.jogos-cards-table tr.jogos-detail-row { display: block; }
+    table.jogos-cards-table tr.jogos-detail-row td { display: block; padding: 0; border: none; }
+  }
   .jogos-detail-inner { max-height: 0; overflow: hidden; transition: max-height .25s ease; padding: 0 16px; }
   .jogos-detail-inner.aberto { max-height: 900px; padding: 16px; }
   .jogos-detail-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; margin-bottom: 16px; }
@@ -979,8 +1006,27 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .page-tab.page-tab-destaque:hover { color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent3-green)); opacity: .92; }
   .page-tab.page-tab-destaque.active { color: #fff; border-bottom-color: transparent; }
   @media (max-width: 640px) {
-    .page-tabs { padding: 0 16px; }
-    .page-tab { padding: 12px 14px; font-size: 13px; }
+    /* menu inferior fixo (bottom nav) — mais fácil de alcançar e reconhecer
+       no celular do que abas horizontais que podem ficar cortadas da tela. */
+    .page-tabs {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 60;
+      background: rgba(15,16,24,.94); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      border-top: 1px solid var(--border); border-bottom: none;
+      padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+      display: flex; justify-content: space-around; gap: 2px; overflow-x: visible;
+    }
+    .page-tab {
+      flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: center;
+      padding: 10px 4px; font-size: 11px; line-height: 1.2; text-align: center; white-space: normal;
+      border-bottom: none; border-radius: var(--r-sm);
+    }
+    .page-tab.active { background: rgba(255,255,255,.08); border-bottom: none; }
+    .page-tab.page-tab-destaque {
+      margin: 0; border-radius: var(--r-sm); box-shadow: none;
+      background: rgba(16,185,129,.18); color: var(--accent2);
+    }
+    .page-tab.page-tab-destaque.active { background: linear-gradient(135deg, var(--accent), var(--accent3-green)); color: #fff; }
+    body { padding-bottom: 68px; }
   }
   .hist-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 20px 24px 0; }
   .hist-header-info { display: flex; gap: 28px; flex-wrap: wrap; }
@@ -2062,7 +2108,7 @@ function renderJogosTabela(jogos, ids, nSorteios) {
   const maisPremiado = jogos.reduce((m, j) => (j.total_premiado > m.total_premiado ? j : m), jogos[0]);
 
   const table = document.createElement('table');
-  table.className = 'jogos-tabela';
+  table.className = 'jogos-tabela jogos-cards-table';
   const thead = document.createElement('thead');
   const trHead = document.createElement('tr');
   COLUNAS_JOGOS.forEach(col => {
@@ -2098,20 +2144,20 @@ function renderJogosTabela(jogos, ids, nSorteios) {
       ? '<span class="resultado-badge lucro">💰 Com lucro</span>'
       : '<span class="resultado-badge prejuizo">📉 Abaixo do investido</span>';
     tr.innerHTML = `
-      <td>${badge}</td>
-      <td style="color:var(--muted)">${i + 1}</td>
-      <td>${nomeTxt}</td>
-      <td class="jogos-dezenas">${dezenasTxt}</td>
-      <td>${jogo.contagem[6]}</td>
-      <td>${jogo.contagem[5]}</td>
-      <td>${jogo.contagem[4]}</td>
-      <td>${jogo.total_premiado}</td>
-      <td>${jogo.pct_premiado}%</td>
-      <td>${formatarMoeda(jogo.gasto)}</td>
-      <td>${formatarMoeda(jogo.ganho)}</td>
-      <td class="${comLucro ? 'money-pos' : 'money-neg'}">${formatarMoeda(jogo.saldo)}</td>
-      <td class="${jogo.roi >= 0 ? 'money-pos' : 'money-neg'}">${formatarPct(jogo.roi)}</td>
-      <td>${melhorTxt}</td>`;
+      <td data-label="">${badge}</td>
+      <td style="color:var(--muted)" data-label="#">${i + 1}</td>
+      <td data-label="Jogo">${nomeTxt}</td>
+      <td class="jogos-dezenas" data-label="Dezenas">${dezenasTxt}</td>
+      <td data-label="Sena">${jogo.contagem[6]}</td>
+      <td data-label="Quina">${jogo.contagem[5]}</td>
+      <td data-label="Quadra">${jogo.contagem[4]}</td>
+      <td data-label="Total≥4">${jogo.total_premiado}</td>
+      <td data-label="% Premiado">${jogo.pct_premiado}%</td>
+      <td data-label="Gasto">${formatarMoeda(jogo.gasto)}</td>
+      <td data-label="Ganho">${formatarMoeda(jogo.ganho)}</td>
+      <td class="${comLucro ? 'money-pos' : 'money-neg'}" data-label="Saldo">${formatarMoeda(jogo.saldo)}</td>
+      <td class="${jogo.roi >= 0 ? 'money-pos' : 'money-neg'}" data-label="Retorno">${formatarPct(jogo.roi)}</td>
+      <td data-label="Melhor resultado">${melhorTxt}</td>`;
     tbody.appendChild(tr);
 
     const trDetail = document.createElement('tr');
