@@ -556,13 +556,13 @@
 </div>
 
 <div class="page-tabs">
-  <button class="page-tab page-tab-destaque" id="page-tab-simulador">🎯 Simulador de Jogo</button>
-  <button class="page-tab active" id="page-tab-geral">Visão Geral</button>
+  <button class="page-tab page-tab-destaque active" id="page-tab-simulador">🎯 Simulador de Jogo</button>
+  <button class="page-tab" id="page-tab-geral">Visão Geral</button>
   <button class="page-tab" id="page-tab-blocos">Blocos</button>
   <button class="page-tab" id="page-tab-historico">Histórico</button>
 </div>
 
-<div id="page-geral" class="page-content">
+<div id="page-geral" class="page-content" style="display:none;">
 <!-- Grade interativa 6×10 — substitui o mapa de calor estático; clique filtra os gráficos abaixo -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card numgrid-card">
@@ -819,7 +819,7 @@
 
 </div><!-- /page-historico -->
 
-<div id="page-simulador" class="page-content" style="display:none;">
+<div id="page-simulador" class="page-content">
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card">
     <h2>🎱 Simulador de Jogo</h2>

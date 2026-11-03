@@ -1305,13 +1305,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 </div>
 
 <div class="page-tabs">
-  <button class="page-tab page-tab-destaque" id="page-tab-simulador">🎯 Simulador de Jogo</button>
-  <button class="page-tab active" id="page-tab-geral">Visão Geral</button>
+  <button class="page-tab page-tab-destaque active" id="page-tab-simulador">🎯 Simulador de Jogo</button>
+  <button class="page-tab" id="page-tab-geral">Visão Geral</button>
   <button class="page-tab" id="page-tab-blocos">Blocos</button>
   <button class="page-tab" id="page-tab-historico">Histórico</button>
 </div>
 
-<div id="page-geral" class="page-content">
+<div id="page-geral" class="page-content" style="display:none;">
 <!-- Grade interativa 5×5 — substitui o heatmap estático; clique filtra os gráficos abaixo -->
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card numgrid-card">
@@ -1626,7 +1626,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
 </div><!-- /page-historico -->
 
-<div id="page-simulador" class="page-content" style="display:none;">
+<div id="page-simulador" class="page-content">
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card">
     <h2>🎱 Simulador de Jogo</h2>
