@@ -700,8 +700,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     -webkit-font-smoothing: antialiased;
   }
   @media (max-width: 640px) { body { font-size: 13px; } }
-  a.voltar-menu { color: var(--accent2); text-decoration: none; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
-  a.voltar-menu:hover { text-decoration: underline; }
+  a.voltar-menu {
+    color: var(--text); text-decoration: none; font-size: 13px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; order: -1;
+    background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r-sm);
+    padding: 8px 14px; transition: border-color .15s, color .15s;
+  }
+  a.voltar-menu:hover { border-color: var(--accent); color: var(--accent2); text-decoration: none; }
   header {
     position: sticky; top: 0; z-index: 50;
     background: rgba(15,16,24,0.72);
@@ -1038,6 +1043,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .page-tab { padding: 14px 20px; border: none; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; flex-shrink: 0; transition: color .15s, border-bottom-color .15s; margin-bottom: -1px; }
   .page-tab:hover { color: var(--text); background: transparent; }
   .page-tab.active { color: var(--accent2); border-bottom-color: var(--accent); box-shadow: none; }
+  .page-tab.page-tab-destaque { color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent3-crimson)); border-radius: var(--r-sm) var(--r-sm) 0 0; margin: 8px 6px 0 0; border-bottom: none; box-shadow: 0 2px 10px rgba(225,29,72,.35); }
+  .page-tab.page-tab-destaque:hover { color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent3-crimson)); opacity: .92; }
+  .page-tab.page-tab-destaque.active { color: #fff; border-bottom-color: transparent; }
   @media (max-width: 640px) {
     .page-tabs { padding: 0 16px; }
     .page-tab { padding: 12px 14px; font-size: 13px; }
@@ -1133,10 +1141,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 </div>
 
 <div class="page-tabs">
+  <button class="page-tab page-tab-destaque" id="page-tab-simulador">🎯 Simulador de Jogo</button>
   <button class="page-tab active" id="page-tab-geral">Visão Geral</button>
   <button class="page-tab" id="page-tab-blocos">Blocos</button>
   <button class="page-tab" id="page-tab-historico">Histórico</button>
-  <button class="page-tab" id="page-tab-simulador">Simulador de Jogo</button>
 </div>
 
 <div id="page-geral" class="page-content">
@@ -2645,10 +2653,10 @@ renderSeletorCascata();
 // ── abas de página: Visão Geral / Blocos / Histórico ─────────────────────────
 {
   const paginas = [
+    { tab: 'page-tab-simulador', pagina: 'page-simulador' },
     { tab: 'page-tab-geral', pagina: 'page-geral' },
     { tab: 'page-tab-blocos', pagina: 'page-blocos' },
     { tab: 'page-tab-historico', pagina: 'page-historico' },
-    { tab: 'page-tab-simulador', pagina: 'page-simulador' },
   ];
   paginas.forEach(({ tab, pagina }) => {
     document.getElementById(tab).addEventListener('click', () => {
