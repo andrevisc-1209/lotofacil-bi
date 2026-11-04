@@ -95,6 +95,15 @@
   body.modo-simples .kpi .value { font-size: 32px !important; }
   body.modo-simples .numgrid-cell { font-size: 16px !important; }
   body.modo-simples .simball-cell { font-size: 15px !important; }
+  /* glossário tocável — balão que aparece ao tocar/clicar em cabeçalhos com
+     explicação (ex: "20 acertos", "Retorno"), já que o title nativo não
+     funciona por toque no celular. */
+  th[title] { cursor: help; text-decoration: underline dotted; text-decoration-color: var(--text-3); text-underline-offset: 3px; }
+  .tap-tooltip {
+    position: fixed; z-index: 200; background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--r-sm); padding: 9px 13px; font-size: 12px; line-height: 1.4;
+    color: var(--text); max-width: 240px; box-shadow: var(--shadow); pointer-events: none;
+  }
   header {
     position: sticky; top: 0; z-index: 50;
     background: rgba(15,16,24,0.72);
@@ -900,6 +909,34 @@
     const ativo = !document.body.classList.contains('modo-simples');
     localStorage.setItem(MODO_SIMPLES_KEY, ativo ? '1' : '0');
     aplicarModoSimples(ativo);
+  });
+}
+
+// ── Glossário tocável — qualquer cabeçalho com atributo title="..." (ex:
+// "20 acertos", "Retorno") já explica o termo ao passar o mouse, mas
+// title não funciona por toque no celular. Este listener global mostra a
+// mesma explicação num balão ao tocar/clicar, sem precisar mexer em cada
+// tabela individualmente. ───────────────────────────────────────────────
+{
+  let tip = null;
+  function esconderTip() { if (tip) { tip.remove(); tip = null; } }
+  document.addEventListener('click', (ev) => {
+    const alvo = ev.target.closest('th[title]');
+    if (!alvo) { esconderTip(); return; }
+    const texto = alvo.getAttribute('title');
+    if (!texto) { esconderTip(); return; }
+    esconderTip();
+    tip = document.createElement('div');
+    tip.className = 'tap-tooltip';
+    tip.textContent = texto;
+    document.body.appendChild(tip);
+    const r = alvo.getBoundingClientRect();
+    const top = Math.min(r.bottom + 6, window.innerHeight - 60);
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - 250));
+    tip.style.top = top + 'px';
+    tip.style.left = left + 'px';
+    setTimeout(esconderTip, 4000);
+    ev.stopPropagation();
   });
 }
 
