@@ -903,6 +903,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .resultado-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
   .resultado-badge.lucro { background: rgba(34,197,94,.15); color: var(--green); }
   .resultado-badge.prejuizo { background: rgba(148,163,184,.15); color: var(--neg); }
+  /* legenda explicativa abaixo de gráficos — traduz o gráfico em uma frase
+     de leitura direta, com o resultado principal em destaque. */
+  .chart-caption { font-size: 12px; color: var(--text-3); margin-top: 12px; line-height: 1.5; }
+  .chart-caption b { color: var(--text); font-weight: 700; }
   /* validador financeiro de jogos ("Meus jogos") */
   .jogos-resumo-titulo { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
   .jogos-resumo-sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
@@ -1193,6 +1197,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <div class="card">
     <h2>📊 Frequência por dezena</h2>
     <canvas id="chartFreq"></canvas>
+    <div class="chart-caption" id="cap-freq"></div>
   </div>
   <div class="card">
     <h2>⏱️ Atraso atual — sorteios sem aparecer</h2>
@@ -1205,6 +1210,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
       <span><span style="color:#059669">■</span> Pares: <b id="pct-pares">—</b></span>
       <span><span style="color:#34d399">■</span> Ímpares: <b id="pct-impares">—</b></span>
     </div>
+    <div class="chart-caption" id="cap-pi"></div>
   </div>
 </div>
 
@@ -1213,6 +1219,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <div class="card">
     <h2>📈 Distribuição por faixa (média por sorteio)</h2>
     <canvas id="chartFaixas"></canvas>
+    <div class="chart-caption" id="cap-faixas"></div>
   </div>
   <div class="card">
     <h2>➕ Distribuição da soma das 6 dezenas</h2>
@@ -1649,6 +1656,13 @@ function renderPI(bundle) {
     },
     options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: '#94a3b8' } } }, cutout: '65%' }
   });
+  const totalGeral = total_p + total_i;
+  const capEl = document.getElementById('cap-pi');
+  if (capEl && totalGeral) {
+    const pctP = (total_p / totalGeral * 100).toFixed(1);
+    const pctI = (total_i / totalGeral * 100).toFixed(1);
+    capEl.innerHTML = `Nos sorteios analisados, <b>${pctP}%</b> das dezenas sorteadas foram pares e <b>${pctI}%</b> foram ímpares — próximo do equilíbrio esperado (50/50).`;
+  }
 }
 
 function renderChartFreq(bundle) {
@@ -1661,6 +1675,12 @@ function renderChartFreq(bundle) {
     data: { labels, datasets: [{ label: 'Vezes sorteada', data: values, backgroundColor: colors, borderRadius: 4 }] },
     options: { ...chartDefaults, plugins: { legend: { display: false } } }
   });
+  const capEl = document.getElementById('cap-freq');
+  if (capEl && sorted_freq.length) {
+    const top = sorted_freq[0];
+    const bottom = sorted_freq[sorted_freq.length - 1];
+    capEl.innerHTML = `A dezena <b>${String(top.d).padStart(2,'0')}</b> foi a mais sorteada (${top.c} vezes); a <b>${String(bottom.d).padStart(2,'0')}</b> foi a menos sorteada (${bottom.c} vezes).`;
+  }
 }
 
 function renderChartAtraso(bundle) {
@@ -1680,14 +1700,19 @@ function renderChartFaixas(bundle) {
   const n = bundle.faixas.length;
   const media = { baixo: 0, medio: 0, alto: 0 };
   bundle.faixas.forEach(f => { media.baixo += f.baixo; media.medio += f.medio; media.alto += f.alto; });
+  const mediaBaixo = media.baixo / n, mediaMedio = media.medio / n, mediaAlto = media.alto / n;
   criarChart('chartFaixas', {
     type: 'bar',
     data: {
       labels: ['Baixo (01-20)', 'Médio (21-40)', 'Alto (41-60)'],
-      datasets: [{ label: 'Média de dezenas por sorteio', data: [media.baixo/n, media.medio/n, media.alto/n].map(v=>+v.toFixed(2)), backgroundColor: ['#34d399','#059669','#047857'], borderRadius: 4 }]
+      datasets: [{ label: 'Média de dezenas por sorteio', data: [mediaBaixo, mediaMedio, mediaAlto].map(v=>+v.toFixed(2)), backgroundColor: ['#34d399','#059669','#047857'], borderRadius: 4 }]
     },
     options: { ...chartDefaults, plugins: { legend: { display: false } } }
   });
+  const capEl = document.getElementById('cap-faixas');
+  if (capEl) {
+    capEl.innerHTML = `Em média, cada sorteio tem <b>${mediaBaixo.toFixed(1)}</b> dezenas baixas (01-20), <b>${mediaMedio.toFixed(1)}</b> médias (21-40) e <b>${mediaAlto.toFixed(1)}</b> altas (41-60).`;
+  }
 }
 
 function renderChartSoma(bundle) {

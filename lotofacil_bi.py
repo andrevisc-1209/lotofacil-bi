@@ -996,6 +996,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .mini-stats b.money-pos { color: var(--green); }
   .mini-stats b.money-neg { color: var(--neg); }
   .mini-stats .explicacao { font-size: 12px; color: var(--text-3); margin-top: 10px; }
+  /* legenda explicativa abaixo de gráficos — traduz o gráfico em uma frase
+     de leitura direta, com o resultado principal em destaque. */
+  .chart-caption { font-size: 12px; color: var(--text-3); margin-top: 12px; line-height: 1.5; }
+  .chart-caption b { color: var(--text); font-weight: 700; }
   /* validador de jogos — resumo, tabela ordenável e detalhe expandível */
   .jogos-resumo-titulo { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
   .jogos-resumo-sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
@@ -1355,6 +1359,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <div class="card">
     <h2>📊 Frequência por dezena</h2>
     <canvas id="chartFreq"></canvas>
+    <div class="chart-caption" id="cap-freq"></div>
   </div>
   <div class="card">
     <h2>⏱️ Atraso atual — sorteios sem aparecer</h2>
@@ -1367,6 +1372,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
       <span><span style="color:#7c3aed">■</span> Pares: <b id="pct-pares">—</b></span>
       <span><span style="color:#06b6d4">■</span> Ímpares: <b id="pct-impares">—</b></span>
     </div>
+    <div class="chart-caption" id="cap-pi"></div>
   </div>
 </div>
 
@@ -1375,6 +1381,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <div class="card">
     <h2>📈 Distribuição por faixa (média por sorteio)</h2>
     <canvas id="chartFaixas"></canvas>
+    <div class="chart-caption" id="cap-faixas"></div>
   </div>
   <div class="card">
     <h2>➕ Distribuição da soma das 15 dezenas</h2>
@@ -1790,6 +1797,13 @@ function renderPI(bundle) {
     },
     options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: '#94a3b8' } } }, cutout: '65%' }
   });
+  const totalGeral = total_p + total_i;
+  const capEl = document.getElementById('cap-pi');
+  if (capEl && totalGeral) {
+    const pctP = (total_p / totalGeral * 100).toFixed(1);
+    const pctI = (total_i / totalGeral * 100).toFixed(1);
+    capEl.innerHTML = `Nos sorteios analisados, <b>${pctP}%</b> das dezenas sorteadas foram pares e <b>${pctI}%</b> foram ímpares — próximo do equilíbrio esperado (50/50).`;
+  }
 }
 
 function renderChartFreq(bundle) {
@@ -1802,6 +1816,12 @@ function renderChartFreq(bundle) {
     data: { labels, datasets: [{ label: 'Vezes sorteada', data: values, backgroundColor: colors, borderRadius: 4 }] },
     options: { ...chartDefaults, plugins: { legend: { display: false } } }
   });
+  const capEl = document.getElementById('cap-freq');
+  if (capEl && sorted_freq.length) {
+    const top = sorted_freq[0];
+    const bottom = sorted_freq[sorted_freq.length - 1];
+    capEl.innerHTML = `A dezena <b>${String(top.d).padStart(2,'0')}</b> foi a mais sorteada (${top.c} vezes); a <b>${String(bottom.d).padStart(2,'0')}</b> foi a menos sorteada (${bottom.c} vezes).`;
+  }
 }
 
 function renderChartAtraso(bundle) {
@@ -3029,19 +3049,24 @@ function renderBlocosMensalMulti(anos) {
 function renderChartFaixas(bundle) {
   const b = bundle.faixas.map(f=>f.baixo), m = bundle.faixas.map(f=>f.medio), a = bundle.faixas.map(f=>f.alto);
   const avg = arr => arr.length ? arr.reduce((x,y)=>x+y,0)/arr.length : 0;
+  const mediaBaixo = avg(b), mediaMedio = avg(m), mediaAlto = avg(a);
   criarChart('chartFaixas', {
     type: 'bar',
     data: {
       labels: ['Baixo (01-08)', 'Médio (09-17)', 'Alto (18-25)'],
       datasets: [{
         label: 'Média por sorteio',
-        data: [avg(b), avg(m), avg(a)],
+        data: [mediaBaixo, mediaMedio, mediaAlto],
         backgroundColor: ['#7c3aed','#06b6d4','#10b981'],
         borderRadius: 6
       }]
     },
     options: { ...chartDefaults, plugins: { legend: { display: false } } }
   });
+  const capEl = document.getElementById('cap-faixas');
+  if (capEl) {
+    capEl.innerHTML = `Em média, cada sorteio tem <b>${mediaBaixo.toFixed(1)}</b> dezenas baixas (01-08), <b>${mediaMedio.toFixed(1)}</b> médias (09-17) e <b>${mediaAlto.toFixed(1)}</b> altas (18-25).`;
+  }
 }
 
 function renderChartSoma(bundle) {

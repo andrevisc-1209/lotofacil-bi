@@ -1096,6 +1096,10 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .fin-item .label { color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
   .fin-item .value { font-size: 18px; font-weight: 700; color: var(--accent2); font-family: var(--font-mono); }
   .fin-item .sub { font-size: 11px; color: var(--text-2); margin-top: 4px; }
+  /* legenda explicativa abaixo de gráficos — traduz o gráfico em uma frase
+     de leitura direta, com o resultado principal em destaque. */
+  .chart-caption { font-size: 12px; color: var(--text-3); margin-top: 12px; line-height: 1.5; }
+  .chart-caption b { color: var(--text); font-weight: 700; }
   /* Meus Jogos — tabela comparativa */
   .jogos-resumo-titulo { font-size: 14px; font-weight: 700; color: var(--accent2); margin-bottom: 10px; }
   .jogos-tabela th[data-col] { cursor: pointer; user-select: none; white-space: nowrap; }
@@ -1347,6 +1351,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <h2>📊 Frequência por dezena (00–99)</h2>
     <div class="tabs" id="freq-tabs"></div>
     <canvas id="chartFreq"></canvas>
+    <div class="chart-caption" id="cap-freq"></div>
   </div>
   <div class="card">
     <h2>⏱️ Atraso atual — sorteios sem aparecer</h2>
@@ -1359,6 +1364,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
       <span><span style="color:#d97706">■</span> Pares: <b id="pct-pares">—</b></span>
       <span><span style="color:#fbbf24">■</span> Ímpares: <b id="pct-impares">—</b></span>
     </div>
+    <div class="chart-caption" id="cap-pi"></div>
   </div>
 </div>
 
@@ -1790,6 +1796,13 @@ function renderPI(bundle) {
     },
     options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: '#94a3b8' } } }, cutout: '65%' }
   });
+  const totalGeral = total_p + total_i;
+  const capEl = document.getElementById('cap-pi');
+  if (capEl && totalGeral) {
+    const pctP = (total_p / totalGeral * 100).toFixed(1);
+    const pctI = (total_i / totalGeral * 100).toFixed(1);
+    capEl.innerHTML = `Nos sorteios analisados, <b>${pctP}%</b> das dezenas sorteadas foram pares e <b>${pctI}%</b> foram ímpares — próximo do equilíbrio esperado (50/50).`;
+  }
 }
 
 // ── Frequência por dezena em 5 abas de 20 (mesmos blocos A-E) — um único
@@ -1841,6 +1854,15 @@ function renderChartFreqTabs(bundle) {
   });
   const atual = FREQ_TAB_RANGES.find(r => r.nome === freqTabAtual) || FREQ_TAB_RANGES[0];
   renderChartFreqRange(bundle, atual);
+  const capEl = document.getElementById('cap-freq');
+  if (capEl) {
+    const sorted_freq = Object.entries(bundle.frequencia).map(([d,c])=>({d:+d,c})).sort((a,b)=>b.c-a.c);
+    if (sorted_freq.length) {
+      const top = sorted_freq[0];
+      const bottom = sorted_freq[sorted_freq.length - 1];
+      capEl.innerHTML = `Considerando todas as dezenas (00-99), a <b>${String(top.d).padStart(2,'0')}</b> foi a mais sorteada (${top.c} vezes); a <b>${String(bottom.d).padStart(2,'0')}</b> foi a menos sorteada (${bottom.c} vezes).`;
+    }
+  }
 }
 
 function renderChartAtraso(bundle) {
