@@ -961,6 +961,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .simball-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
   .simball-contador { font-size: 13px; color: var(--text-2); font-weight: 600; }
   .simball-contador.completo { color: var(--accent2); }
+  /* fluxo guiado do Simulador de Jogo — 2 passos (escolher dezenas → ver
+     resultado) em vez de mostrar grid e resultado juntos na mesma tela. */
+  .sim-step-indicator { display: flex; gap: 16px; margin-bottom: 18px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .sim-step { color: var(--text-3); padding-bottom: 6px; border-bottom: 2px solid var(--border); }
+  .sim-step.active { color: var(--accent2); border-bottom-color: var(--accent); }
+  .sim-step-voltar { margin-bottom: 16px; }
   .sim-historico { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-height: 200px; overflow-y: auto; }
   .sim-hist-item { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 4px 10px; font-size: 11px; font-family: var(--font-mono); color: var(--text-2); white-space: nowrap; }
   .sim-hist-item span.concurso { color: var(--accent2); font-weight: 600; }
@@ -1594,19 +1600,28 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <div class="grid" style="grid-template-columns: 1fr;">
   <div class="card">
     <h2>🎱 Simulador de Jogo</h2>
-    <p style="color:var(--muted); font-size:12px; margin-bottom:14px;">
-      Clique nas dezenas para montar seu jogo (50 números de 00 a 99) e veja como ele teria se saído contra o período selecionado.
-    </p>
-    <div class="simball-grid" id="simball-grid"></div>
-    <div class="simball-footer">
-      <span class="simball-contador" id="simball-contador">0/50 selecionados</span>
-      <div style="display:flex; gap:8px;">
-        <button class="btn-secondary" id="simball-limpar" type="button">Limpar</button>
-        <button class="btn-primary" id="simball-btn" type="button" disabled>Simular ▶</button>
-      </div>
+    <div class="sim-step-indicator">
+      <span class="sim-step active" id="simball-step1-label">1. Escolha suas dezenas</span>
+      <span class="sim-step" id="simball-step2-label">2. Resultado</span>
     </div>
-    <div class="sim-error" id="simball-error" style="display:none;"></div>
-    <div id="simball-result"></div>
+    <div id="simball-step1">
+      <p style="color:var(--muted); font-size:12px; margin-bottom:14px;">
+        Clique nas dezenas para montar seu jogo (50 números de 00 a 99) e veja como ele teria se saído contra o período selecionado.
+      </p>
+      <div class="simball-grid" id="simball-grid"></div>
+      <div class="simball-footer">
+        <span class="simball-contador" id="simball-contador">0/50 selecionados</span>
+        <div style="display:flex; gap:8px;">
+          <button class="btn-secondary" id="simball-limpar" type="button">Limpar</button>
+          <button class="btn-primary" id="simball-btn" type="button" disabled>Simular ▶</button>
+        </div>
+      </div>
+      <div class="sim-error" id="simball-error" style="display:none;"></div>
+    </div>
+    <div id="simball-step2" style="display:none;">
+      <button class="btn-secondary sim-step-voltar" id="simball-novo" type="button">↩ Fazer novo jogo</button>
+      <div id="simball-result"></div>
+    </div>
   </div>
 </div>
 </div><!-- /page-simulador -->
@@ -3765,7 +3780,33 @@ function validarJogoTextoLotomania(texto) {
     const btnLimpar = document.getElementById('simball-limpar');
     const errBallEl = document.getElementById('simball-error');
     const resultBallEl = document.getElementById('simball-result');
+    const step1El = document.getElementById('simball-step1');
+    const step2El = document.getElementById('simball-step2');
+    const step1LabelEl = document.getElementById('simball-step1-label');
+    const step2LabelEl = document.getElementById('simball-step2-label');
+    const btnNovo = document.getElementById('simball-novo');
     const selecionadas = new Set();
+
+    function irParaPasso2() {
+      step1El.style.display = 'none';
+      step2El.style.display = '';
+      step1LabelEl.classList.remove('active');
+      step2LabelEl.classList.add('active');
+      step2El.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    function irParaPasso1() {
+      step2El.style.display = 'none';
+      step1El.style.display = '';
+      step2LabelEl.classList.remove('active');
+      step1LabelEl.classList.add('active');
+    }
+    btnNovo.addEventListener('click', () => {
+      selecionadas.clear();
+      grid.querySelectorAll('.simball-cell').forEach(cell => cell.classList.remove('selecionada'));
+      atualizarContador();
+      resultBallEl.innerHTML = '';
+      irParaPasso1();
+    });
 
     function atualizarContador() {
       contadorEl.textContent = `${selecionadas.size}/${SIMBALL_MIN} selecionados`;
@@ -3819,6 +3860,7 @@ function validarJogoTextoLotomania(texto) {
       const sorteiosMetaSim = bundleSim.sorteios_meta || DATA.sorteios_meta || [];
       const resultado = calcularResultadoLotomania(numeros, sorteiosRawSim, sorteiosMetaSim);
       renderizarResultadoUnicoLotomania(resultado, resultBallEl);
+      irParaPasso2();
     });
   }
 }
