@@ -840,6 +840,24 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .sim-step { color: var(--text-3); padding-bottom: 6px; border-bottom: 2px solid var(--border); }
   .sim-step.active { color: var(--accent2); border-bottom-color: var(--accent); }
   .sim-step-voltar { margin-bottom: 16px; }
+  /* analisador de jogo — cartão de insights do histórico + termômetro */
+  .analise-card { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r-md); padding: 16px; margin-bottom: 18px; }
+  .analise-titulo { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 12px; }
+  .termometro { display: flex; gap: 4px; margin-bottom: 8px; }
+  .termo-seg { flex: 1; text-align: center; padding: 8px 4px; font-size: 12px; font-weight: 700; border-radius: var(--r-sm); background: var(--bg2); color: var(--text-3); border: 1px solid var(--border); }
+  .termo-seg.ativo { color: #fff; border-color: transparent; }
+  .termo-seg.n0 { background: #16a34a; } .termo-seg.n1 { background: #ca8a04; }
+  .termo-seg.n2 { background: #ea580c; } .termo-seg.n3 { background: #3b82f6; }
+  .termo-motivo { font-size: 13px; color: var(--text-2); margin-bottom: 14px; }
+  .analise-lista { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .analise-lista li { font-size: 13px; color: var(--text-2); line-height: 1.5; padding-bottom: 10px; border-bottom: 1px dashed var(--border); }
+  .analise-lista li b { color: var(--text); }
+  .analise-fonte { display: block; font-size: 11px; color: var(--text-3); margin-top: 2px; }
+  .analise-dezenas { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+  .analise-dz { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 3px 8px; font-size: 12px; font-family: var(--font-mono); }
+  .analise-rodape { font-size: 11px; color: var(--text-3); margin-top: 14px; line-height: 1.5; }
+  body.modo-simples .analise-lista li { font-size: 15px !important; }
+  body.modo-simples .termo-seg { font-size: 14px !important; }
   .sim-historico { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-height: 200px; overflow-y: auto; }
   .sim-hist-item { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 4px 10px; font-size: 11px; font-family: var(--font-mono); color: var(--text-2); white-space: nowrap; }
   .sim-hist-item span.concurso { color: var(--accent2); font-weight: 600; }
@@ -1452,6 +1470,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     </div>
     <div id="simball-step2" style="display:none;">
       <button class="btn-secondary sim-step-voltar" id="simball-novo" type="button">↩ Fazer novo jogo</button>
+      <div id="simball-analise"></div>
       <div id="simball-result"></div>
     </div>
   </div>
@@ -3108,6 +3127,199 @@ function megasimRenderResultado(resultados, elId) {
   });
 }
 
+// ── Analisador de jogo — fatos do histórico sobre o jogo escolhido, cada um
+// com sua fonte (concurso/data), e um termômetro que resume o quanto o perfil
+// do jogo já apareceu nos sorteios. Descritivo: não altera nem estima a
+// chance de acerto, que é igual para qualquer combinação. ───────────────────
+let _megaCombCache = null;
+function megaCombinacoes() {
+  if (_megaCombCache) return _megaCombCache;
+  const pares = new Map(), trios = new Map();
+  DATA.sorteios_raw.forEach(t => {
+    for (let i = 0; i < 6; i++) for (let j = i + 1; j < 6; j++) {
+      const kp = t[i] + '-' + t[j];
+      pares.set(kp, (pares.get(kp) || 0) + 1);
+      for (let k = j + 1; k < 6; k++) {
+        const kt = kp + '-' + t[k];
+        trios.set(kt, (trios.get(kt) || 0) + 1);
+      }
+    }
+  });
+  _megaCombCache = { pares, trios };
+  return _megaCombCache;
+}
+
+function megaMaxSeq(t) {
+  let r = 1, m = 1;
+  for (let i = 1; i < t.length; i++) { r = t[i] === t[i - 1] + 1 ? r + 1 : 1; if (r > m) m = r; }
+  return m;
+}
+
+function megaSequencias(t) {
+  const out = []; let atual = [t[0]];
+  for (let i = 1; i < t.length; i++) {
+    if (t[i] === t[i - 1] + 1) atual.push(t[i]);
+    else { if (atual.length >= 2) out.push(atual); atual = [t[i]]; }
+  }
+  if (atual.length >= 2) out.push(atual);
+  return out;
+}
+
+// fração dos concursos cujo traço é igual ou mais raro que o do jogo
+// (traço categórico: soma a frequência de todas as categorias tão ou menos
+// frequentes que a do jogo)
+function megaRaridadeCat(rawP, keyFn, keyJ) {
+  const cnt = new Map();
+  rawP.forEach(t => { const k = keyFn(t); cnt.set(k, (cnt.get(k) || 0) + 1); });
+  const fj = cnt.get(keyJ) || 0;
+  let raro = 0;
+  cnt.forEach(v => { if (v <= fj) raro += v; });
+  return { qtd: fj, freq: fj / rawP.length, frac: raro / rawP.length };
+}
+
+const MEGA_NIVEIS = ['Comum', 'Incomum', 'Raro', 'Inédito'];
+function megaNivel(frac) { return frac === 0 ? 3 : frac < 0.05 ? 2 : frac < 0.20 ? 1 : 0; }
+function megaPct(x) {
+  return (x * 100).toLocaleString('pt-BR', { maximumFractionDigits: x < 0.1 ? 2 : 1 }) + '%';
+}
+
+function megaAnalisarJogo(numeros, rawP, bundle) {
+  const rawF = DATA.sorteios_raw, metaF = DATA.sorteios_meta;
+  const NF = rawF.length, NP = rawP.length;
+  const fonte = i => `concurso ${metaF[i].concurso} (${metaF[i].data})`;
+  const chave = numeros.join('-');
+  const setJ = new Set(numeros);
+  const A = { NF, NP, tracos: [] };
+
+  // 1) já sorteado / repetições no histórico
+  const idxIgual = rawF.findIndex(t => t.join('-') === chave);
+  A.sorteado = idxIgual >= 0 ? fonte(idxIgual) : null;
+  A.repeticoes = NF - new Set(rawF.map(t => t.join('-'))).size;
+
+  // 2) vizinho mais próximo (excluindo o próprio jogo)
+  let melhor = -1, lista = [];
+  rawF.forEach((t, i) => {
+    const o = t.filter(n => setJ.has(n)).length;
+    if (o === 6) return;
+    if (o > melhor) { melhor = o; lista = [i]; } else if (o === melhor) lista.push(i);
+  });
+  A.vizinho = { comuns: melhor, total: lista.length, fontes: lista.slice(-3).reverse().map(fonte) };
+
+  // 3) consecutivos
+  const seqJ = megaMaxSeq(numeros);
+  const qtdSeq = rawP.filter(t => megaMaxSeq(t) >= seqJ).length;
+  let ultSeq = -1;
+  for (let i = NF - 1; i >= 0; i--) if (megaMaxSeq(rawF[i]) >= seqJ) { ultSeq = i; break; }
+  const maxSeqHist = Math.max(...rawF.map(megaMaxSeq));
+  A.seq = { jogo: seqJ, sequencias: megaSequencias(numeros), frac: qtdSeq / NP, qtd: qtdSeq,
+            semPar: rawP.filter(t => megaMaxSeq(t) === 1).length / NP,
+            ultima: ultSeq >= 0 ? fonte(ultSeq) : null, maxHist: maxSeqHist,
+            qtdMax: rawF.filter(t => megaMaxSeq(t) === maxSeqHist).length };
+  A.tracos.push({ nome: `${seqJ === 1 ? 'nenhuma dezena seguida' : seqJ + ' dezenas seguidas'}`, frac: qtdSeq / NP });
+
+  // 4) pares/ímpares e faixas
+  const pares = t => t.filter(n => n % 2 === 0).length;
+  A.par = megaRaridadeCat(rawP, pares, pares(numeros)); A.par.k = pares(numeros);
+  A.tracos.push({ nome: `${A.par.k} pares e ${6 - A.par.k} ímpares`, frac: A.par.frac });
+  const faixa = t => [t.filter(n => n <= 20).length, t.filter(n => n > 20 && n <= 40).length, t.filter(n => n > 40).length].join('/');
+  A.faixa = megaRaridadeCat(rawP, faixa, faixa(numeros)); A.faixa.k = faixa(numeros).split('/');
+  A.tracos.push({ nome: `distribuição ${A.faixa.k.join('/')} por faixa`, frac: A.faixa.frac });
+
+  // 5) soma e amplitude
+  const somas = rawP.map(t => t.reduce((a, b) => a + b, 0));
+  const media = somas.reduce((a, b) => a + b, 0) / NP;
+  const sJ = numeros.reduce((a, b) => a + b, 0);
+  const longe = somas.filter(s => Math.abs(s - media) >= Math.abs(sJ - media)).length;
+  const amps = rawP.map(t => t[5] - t[0]).sort((a, b) => a - b);
+  const aJ = numeros[5] - numeros[0];
+  A.soma = { soma: sJ, media, fracLonge: longe / NP, amplitude: aJ,
+             ampMediana: amps[Math.floor(NP / 2)], ampAbaixo: amps.filter(a => a <= aJ).length / NP };
+  A.tracos.push({ nome: `soma ${sJ}`, frac: longe / NP });
+
+  // 6) pares e trios que já saíram juntos
+  const { pares: mp, trios: mt } = megaCombinacoes();
+  const prs = [], trs = [];
+  for (let i = 0; i < 6; i++) for (let j = i + 1; j < 6; j++) {
+    prs.push(mp.get(numeros[i] + '-' + numeros[j]) || 0);
+    for (let k = j + 1; k < 6; k++) trs.push(mt.get(numeros[i] + '-' + numeros[j] + '-' + numeros[k]) || 0);
+  }
+  A.comb = { parMin: Math.min(...prs), parMax: Math.max(...prs), parEsp: NF * 30 / (60 * 59),
+             trioJaSaiu: trs.filter(c => c > 0).length, trioNunca: trs.filter(c => c === 0).length,
+             trioMax: Math.max(...trs), trioEsp: NF * 120 / (60 * 59 * 58) };
+
+  // 7) repetição do último concurso
+  const ult = rawF[NF - 1];
+  const ovJ = numeros.filter(n => ult.includes(n)).length;
+  if (NP > 1) {
+    const ovs = [];
+    for (let i = 1; i < NP; i++) ovs.push(rawP[i].filter(n => rawP[i - 1].includes(n)).length);
+    const cnt = new Map(); ovs.forEach(o => cnt.set(o, (cnt.get(o) || 0) + 1));
+    const fj = cnt.get(ovJ) || 0; let raro = 0; cnt.forEach(v => { if (v <= fj) raro += v; });
+    A.rep = { comuns: ovJ, freq: fj / ovs.length, fonte: fonte(NF - 1) };
+    A.tracos.push({ nome: `${ovJ} dezena${ovJ === 1 ? '' : 's'} do último concurso`, frac: raro / ovs.length });
+  }
+
+  // 8) perfil de prêmio: média de ganhadores da sena por perfil (histórico completo)
+  const ate31 = numeros.filter(n => n <= 31).length;
+  const grupo = metaF.filter((m, i) => rawF[i].filter(n => n <= 31).length === ate31);
+  const mediaG = arr => arr.length ? arr.reduce((a, m) => a + (m.ganhadores || 0), 0) / arr.length : 0;
+  A.premio = { ate31, n31: grupo.length, media31: mediaG(grupo), mediaGeral: mediaG(metaF) };
+  if (seqJ >= 3) {
+    const gs = metaF.filter((m, i) => megaMaxSeq(rawF[i]) >= 3);
+    A.premio.nSeq = gs.length; A.premio.mediaSeq = mediaG(gs);
+  }
+
+  // 9) dezenas
+  const freq = bundle.frequencia || DATA.frequencia, atr = bundle.atraso || DATA.atraso;
+  A.dezenas = numeros.map(n => ({ n, freq: freq[n] || 0, atraso: atr[n] != null ? atr[n] : null }));
+  A.freqEsp = NP * 6 / 60;
+
+  // termômetro: o traço mais raro define o nível
+  const pior = A.tracos.reduce((a, b) => (b.frac < a.frac ? b : a));
+  A.nivel = A.sorteado ? 3 : megaNivel(pior.frac);
+  A.motivo = A.sorteado ? 'este jogo já foi sorteado' : pior;
+  return A;
+}
+
+function megaRenderAnalise(numeros, bundle, el) {
+  if (!el) return;
+  const rawP = bundle.sorteios_raw || DATA.sorteios_raw;
+  const A = megaAnalisarJogo(numeros, rawP, bundle);
+  const f1 = x => x.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+  const li = (titulo, texto, fonte) =>
+    `<li><b>${titulo}</b> ${texto}${fonte ? `<span class="analise-fonte">Fonte: ${fonte}</span>` : ''}</li>`;
+  const itens = [];
+
+  itens.push(A.sorteado
+    ? li('Jogo já sorteado.', `Essas 6 dezenas já saíram juntas. Mesmo assim, em ${A.NF} concursos ${A.repeticoes === 0 ? 'nenhuma combinação se repetiu' : A.repeticoes + ' combinação(ões) se repetiu'}.`, A.sorteado)
+    : li('Jogo inédito.', `Essas 6 dezenas nunca saíram juntas. Em ${A.NF} concursos, ${A.repeticoes === 0 ? 'nenhuma combinação se repetiu' : A.repeticoes + ' combinação(ões) se repetiu'}.`, 'histórico completo'));
+  itens.push(li('Sorteio mais parecido.', `O mais próximo teve ${A.vizinho.comuns} dezenas em comum com o seu jogo (${A.vizinho.total} concurso${A.vizinho.total === 1 ? '' : 's'} nesse nível).`, A.vizinho.fontes.join('; ')));
+  const sq = A.seq;
+  const descSeq = sq.jogo === 1 ? 'Seu jogo não tem dezenas seguidas.' : `Seu jogo tem ${sq.sequencias.map(s => s.map(n => String(n).padStart(2, '0')).join('-')).join(' e ')}.`;
+  itens.push(li('Dezenas seguidas.', `${descSeq} ${sq.jogo === 1 ? `${megaPct(sq.semPar)} dos concursos também não tiveram` : `${megaPct(sq.frac)} dos concursos tiveram ${sq.jogo} ou mais seguidas`}. O máximo já visto foi ${sq.maxHist} seguidas (${sq.qtdMax} concurso${sq.qtdMax === 1 ? '' : 's'}).`, sq.ultima && sq.jogo > 1 ? 'última vez: ' + sq.ultima : `${A.NP} concursos do período`));
+  itens.push(li('Pares e ímpares.', `${A.par.k} pares e ${6 - A.par.k} ímpares apareceu em ${megaPct(A.par.freq)} dos concursos.`, `${A.NP} concursos do período`));
+  itens.push(li('Faixas (01-20 / 21-40 / 41-60).', `A divisão ${A.faixa.k.join('/')} apareceu em ${megaPct(A.faixa.freq)} dos concursos.`, `${A.NP} concursos do período`));
+  itens.push(li('Soma e amplitude.', `Soma ${A.soma.soma} (média histórica ${f1(A.soma.media)}); ${megaPct(A.soma.fracLonge)} dos concursos ficaram tão longe ou mais da média. Amplitude ${A.soma.amplitude} (mediana ${A.soma.ampMediana}).`, `${A.NP} concursos do período`));
+  itens.push(li('Pares e trios.', `Dos 15 pares do seu jogo, o menos frequente saiu junto ${A.comb.parMin}x e o mais frequente ${A.comb.parMax}x (esperado por acaso: ~${f1(A.comb.parEsp)}x). Dos 20 trios, ${A.comb.trioJaSaiu} já saíram juntos e ${A.comb.trioNunca} nunca (esperado: ~${f1(A.comb.trioEsp)}x por trio; o mais frequente saiu ${A.comb.trioMax}x).`, `${A.NF} concursos, histórico completo`));
+  if (A.rep) itens.push(li('Repetição do último concurso.', `Seu jogo tem ${A.rep.comuns} dezena${A.rep.comuns === 1 ? '' : 's'} do último sorteio; ${megaPct(A.rep.freq)} dos concursos repetiram essa quantidade do anterior.`, 'último sorteio: ' + A.rep.fonte));
+  const p = A.premio;
+  let txtPremio = `Concursos em que saíram ${p.ate31} dezenas até 31 (como em datas de aniversário) tiveram em média ${f1(p.media31)} ganhadores na sena (${p.n31} concursos), contra ${f1(p.mediaGeral)} no geral.`;
+  if (p.nSeq) txtPremio += ` Com 3+ seguidas: ${f1(p.mediaSeq)} (${p.nSeq} concursos).`;
+  itens.push(li('Risco de dividir o prêmio.', `${txtPremio} Amostra pequena, e o volume de apostas mudou ao longo dos anos: leia como indício, não como regra.`, 'ganhadores da sena, histórico completo'));
+  itens.push(li('Dezenas.', `<span class="analise-dezenas">${A.dezenas.map(d => `<span class="analise-dz"><b>${String(d.n).padStart(2, '0')}</b> ${d.freq}x${d.atraso != null ? ' · atraso ' + d.atraso : ''}</span>`).join('')}</span>(esperado por acaso: ~${f1(A.freqEsp)}x cada)`, `${A.NP} concursos do período`));
+
+  const segs = MEGA_NIVEIS.map((nome, i) => `<span class="termo-seg ${i === A.nivel ? 'ativo n' + i : ''}">${nome}</span>`).join('');
+  const motivo = A.sorteado ? 'Este jogo já foi sorteado.' : `Traço mais raro: ${A.motivo.nome} — ${megaPct(A.motivo.frac)} dos concursos tiveram perfil igual ou mais raro.`;
+  el.innerHTML = `
+    <div class="analise-card">
+      <div class="analise-titulo">🔎 Análise do histórico</div>
+      <div class="termometro" role="img" aria-label="Termômetro: ${MEGA_NIVEIS[A.nivel]}">${segs}</div>
+      <p class="termo-motivo">${motivo}</p>
+      <ul class="analise-lista">${itens.join('')}</ul>
+      <p class="analise-rodape">Mostra o quanto o perfil do jogo já apareceu no histórico. Não altera a chance de acerto, que é igual para qualquer combinação de 6 dezenas. Níveis: Comum (20% ou mais), Incomum (5–20%), Raro (menos de 5%), Inédito (nunca ocorreu).</p>
+    </div>`;
+}
+
 // ── Simulador de Jogo (bolinhas) — mesma entrada de dados (universo 1-60,
 // exatamente 6 números), reaproveita megasimSimularJogo/megasimRenderResultado
 // do simulador por texto acima em vez de duplicar o cálculo. ────────────────
@@ -3143,6 +3355,7 @@ function megasimRenderResultado(resultados, elId) {
     grid.querySelectorAll('.simball-cell').forEach(cell => cell.classList.remove('selecionada'));
     atualizarContador();
     document.getElementById('simball-result').innerHTML = '';
+    document.getElementById('simball-analise').innerHTML = '';
     irParaPasso1();
   });
 
@@ -3198,6 +3411,7 @@ function megasimRenderResultado(resultados, elId) {
     const sorteiosMeta = bundle.sorteios_meta || DATA.sorteios_meta || [];
     const resultado = megasimSimularJogo(numeros, sorteiosRaw, sorteiosMeta);
     megasimRenderResultado([resultado], 'simball-result');
+    megaRenderAnalise(numeros, bundle, document.getElementById('simball-analise'));
     irParaPasso2();
   });
 }
